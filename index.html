@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05070f">
+<title>Pixel Atelier</title>
+<meta name="description" content="Color indexed pixel cells on a neon drafting table to reveal animated pixel art.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%2305070f'/><rect x='2' y='2' width='5' height='5' fill='%2322d3ee'/><rect x='9' y='2' width='5' height='5' fill='%23f472b6'/><rect x='2' y='9' width='5' height='5' fill='%23ffd166'/><rect x='9' y='9' width='5' height='5' fill='%233fd68f'/></svg>">
+</head>
+<body>
+<a class="skip-link" href="#hud-palette">Skip to palette</a>
+<div id="app" data-screen="boot">
+
+  <!-- Three.js canvas fills the game region; it is never the only UI. -->
+  <canvas id="gl" aria-hidden="true"></canvas>
+  <canvas id="flat" aria-hidden="true" hidden></canvas>
+
+  <!-- Boot / loading -->
+  <section id="screen-boot" class="screen" role="status" aria-label="Loading">
+    <div class="boot-card">
+      <div class="logo-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <h1 class="wordmark">Pixel Atelier</h1>
+      <p id="boot-status">Warming up the drafting table…</p>
+      <div class="boot-bar"><div id="boot-fill"></div></div>
+      <p id="boot-compat" class="compat-note" hidden></p>
+    </div>
+  </section>
+
+  <!-- Title / home -->
+  <section id="screen-title" class="screen menu-screen" aria-labelledby="title-h" hidden>
+    <div class="menu-card">
+      <div class="logo-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <h1 id="title-h" class="wordmark">Pixel Atelier</h1>
+      <p class="tagline">Paint the table. Reveal the art.</p>
+      <div class="menu-actions">
+        <button id="btn-play" class="btn primary big">Play</button>
+        <div class="menu-grid">
+          <button id="btn-daily" class="btn"><span class="btn-title">Daily Table</span><span id="daily-sub" class="btn-sub">New canvas today</span></button>
+          <button id="btn-journey" class="btn"><span class="btn-title">Journey</span><span id="journey-sub" class="btn-sub">0 / 42 stages</span></button>
+          <button id="btn-practice" class="btn"><span class="btn-title">Practice</span><span class="btn-sub">Unranked, undo allowed</span></button>
+          <button id="btn-challenge" class="btn"><span class="btn-title">Challenge</span><span class="btn-sub">Constrained rulesets</span></button>
+          <button id="btn-chase" class="btn"><span class="btn-title">Score Chase</span><span class="btn-sub">Weekly ranked board</span></button>
+          <button id="btn-learn" class="btn"><span class="btn-title">Learn</span><span id="learn-sub" class="btn-sub">4 lessons</span></button>
+        </div>
+        <div class="menu-row">
+          <button id="btn-profile" class="btn ghost">Profile</button>
+          <button id="btn-settings" class="btn ghost">Settings</button>
+          <button id="btn-help" class="btn ghost">How to play</button>
+        </div>
+      </div>
+      <p id="title-note" class="fine"></p>
+    </div>
+  </section>
+
+  <!-- Learn: lesson list -->
+  <section id="screen-learn" class="screen menu-screen" aria-labelledby="learn-h" hidden>
+    <div class="menu-card wide">
+      <h2 id="learn-h">Atelier Lessons</h2>
+      <p class="dim">One rule at a time. Each lesson asks you to perform the action.</p>
+      <ol id="lesson-list" class="card-list"></ol>
+      <div class="menu-row"><button class="btn ghost" data-nav="title">Back</button></div>
+    </div>
+  </section>
+
+  <!-- Journey: progression map -->
+  <section id="screen-journey" class="screen menu-screen" aria-labelledby="journey-h" hidden>
+    <div class="menu-card wide">
+      <h2 id="journey-h">Journey</h2>
+      <p class="dim">Seven chapters. Every sixth stage is a mastery table.</p>
+      <div id="journey-map" class="journey-map"></div>
+      <div class="menu-row"><button class="btn ghost" data-nav="title">Back</button></div>
+    </div>
+  </section>
+
+  <!-- Mode setup -->
+  <section id="screen-setup" class="screen menu-screen" aria-labelledby="setup-h" hidden>
+    <div class="menu-card">
+      <h2 id="setup-h">Set up</h2>
+      <div id="setup-body"></div>
+      <div class="menu-row">
+        <button id="btn-setup-start" class="btn primary">Start</button>
+        <button class="btn ghost" data-nav="title">Back</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section id="screen-results" class="screen menu-screen" aria-labelledby="results-h" hidden>
+    <div class="menu-card">
+      <h2 id="results-h">Results</h2>
+      <p id="results-headline" class="headline"></p>
+      <div id="results-stars" class="stars" aria-hidden="true"></div>
+      <table id="results-table" class="score-table"></table>
+      <p id="results-progress" class="dim"></p>
+      <div id="results-achievements" class="ach-row"></div>
+      <div id="results-board" class="board-mini"></div>
+      <p id="results-seed" class="fine"></p>
+      <div class="menu-row wrap">
+        <button id="btn-results-next" class="btn primary">Next</button>
+        <button id="btn-results-retry" class="btn">Retry</button>
+        <button id="btn-results-replay" class="btn ghost">Watch replay</button>
+        <button class="btn ghost" data-nav="title">Home</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Profile -->
+  <section id="screen-profile" class="screen menu-screen" aria-labelledby="profile-h" hidden>
+    <div class="menu-card wide">
+      <h2 id="profile-h">Profile</h2>
+      <div class="profile-grid">
+        <div>
+          <label class="field">Display name
+            <input id="profile-name" type="text" maxlength="24" autocomplete="off">
+          </label>
+          <p id="profile-identity" class="dim"></p>
+          <dl id="profile-stats" class="stat-list"></dl>
+        </div>
+        <div>
+          <h3>Achievements</h3>
+          <ul id="ach-list" class="ach-list"></ul>
+        </div>
+      </div>
+      <h3>Rivals <span class="dim">(local score comparison)</span></h3>
+      <div class="menu-row">
+        <input id="rival-name" type="text" maxlength="24" placeholder="Rival name" aria-label="Rival name">
+        <button id="btn-add-rival" class="btn">Add rival</button>
+      </div>
+      <ul id="rival-list" class="card-list"></ul>
+      <div class="menu-row">
+        <button id="btn-cloud-sync" class="btn ghost" hidden>Sync cloud save</button>
+        <button class="btn ghost" data-nav="title">Back</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Leaderboard / score chase detail -->
+  <section id="screen-board" class="screen menu-screen" aria-labelledby="board-h" hidden>
+    <div class="menu-card">
+      <h2 id="board-h">Leaderboard</h2>
+      <p id="board-sub" class="dim"></p>
+      <div class="menu-row" role="tablist" aria-label="Board scope">
+        <button id="board-tab-global" class="btn chip" role="tab" aria-selected="true">Global</button>
+        <button id="board-tab-friends" class="btn chip" role="tab" aria-selected="false">Friends</button>
+      </div>
+      <ol id="board-list" class="board-list"></ol>
+      <p id="board-note" class="fine"></p>
+      <div class="menu-row"><button class="btn ghost" data-nav="title">Back</button></div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section id="screen-settings" class="screen menu-screen" aria-labelledby="settings-h" hidden>
+    <div class="menu-card wide">
+      <h2 id="settings-h">Settings</h2>
+      <div class="settings-grid">
+        <fieldset>
+          <legend>Audio</legend>
+          <label class="slider">Music <input type="range" id="vol-music" min="0" max="100" step="1"><output for="vol-music"></output></label>
+          <label class="slider">Effects <input type="range" id="vol-effects" min="0" max="100" step="1"><output for="vol-effects"></output></label>
+          <label class="slider">Ambience <input type="range" id="vol-ambience" min="0" max="100" step="1"><output for="vol-ambience"></output></label>
+          <label class="slider">Voice cues <input type="range" id="vol-voice" min="0" max="100" step="1"><output for="vol-voice"></output></label>
+          <label class="check"><input type="checkbox" id="set-muted"> Mute all</label>
+          <label class="check"><input type="checkbox" id="set-captions"> Captions for audio cues</label>
+          <label class="check"><input type="checkbox" id="set-haptics"> Haptics (vibration)</label>
+        </fieldset>
+        <fieldset>
+          <legend>Graphics</legend>
+          <label class="field">Quality tier
+            <select id="set-tier">
+              <option value="auto">Auto</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="set-motion"> Reduced motion</label>
+          <label class="check"><input type="checkbox" id="set-contrast"> High contrast interface</label>
+          <label class="check"><input type="checkbox" id="set-text"> Larger text</label>
+          <label class="check"><input type="checkbox" id="set-labels"> Always show cell numbers</label>
+          <label class="field">Cell palette
+            <select id="set-palette">
+              <option value="default">Artwork colors</option>
+              <option value="contrast">Vivid contrast</option>
+              <option value="cvd">Color-vision safe</option>
+            </select>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Controls</legend>
+          <label class="check"><input type="checkbox" id="set-lefty"> Left-handed layout</label>
+          <label class="check"><input type="checkbox" id="set-hold"> Hold to paint (off = toggle)</label>
+          <label class="check"><input type="checkbox" id="set-timing"> Timing assistance (+50% time)</label>
+          <div id="bindings-list" class="bindings"></div>
+          <p class="fine">Select a binding, then press a key. Gamepad: D-pad moves the cursor, A paints, B cancels, X undoes, Y hints, shoulders cycle colors, Start pauses.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Theme (cosmetic)</legend>
+          <div id="theme-list" class="theme-list"></div>
+          <p class="fine">Themes change only materials and ambience — never gameplay.</p>
+          <h3>Privacy</h3>
+          <label class="check"><input type="checkbox" id="set-telemetry"> Share anonymous usage stats</label>
+          <button id="btn-replay-tutorials" class="btn ghost">Replay tutorials</button>
+          <button id="btn-wipe" class="btn ghost danger">Erase local data</button>
+        </fieldset>
+      </div>
+      <div class="menu-row"><button class="btn ghost" data-nav="title">Back</button></div>
+    </div>
+  </section>
+
+  <!-- Help -->
+  <section id="screen-help" class="screen menu-screen" aria-labelledby="help-h" hidden>
+    <div class="menu-card wide">
+      <h2 id="help-h">How to play</h2>
+      <div id="help-cards" class="help-grid"></div>
+      <div class="menu-row"><button class="btn ghost" data-nav="title">Back</button></div>
+    </div>
+  </section>
+
+  <!-- Pause overlay -->
+  <div id="overlay-pause" class="overlay" role="dialog" aria-modal="true" aria-labelledby="pause-h" hidden>
+    <div class="overlay-card">
+      <h2 id="pause-h">Paused</h2>
+      <p id="pause-summary" class="dim"></p>
+      <div class="menu-col">
+        <button id="btn-resume" class="btn primary">Resume</button>
+        <button id="btn-pause-settings" class="btn">Settings</button>
+        <button id="btn-skip-anim" class="btn ghost">Skip animations</button>
+        <button id="btn-restart-round" class="btn ghost">Restart round</button>
+        <button id="btn-leave-round" class="btn ghost danger">Leave round</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm dialog -->
+  <div id="overlay-confirm" class="overlay" role="alertdialog" aria-modal="true" aria-labelledby="confirm-h" hidden>
+    <div class="overlay-card">
+      <h2 id="confirm-h">Are you sure?</h2>
+      <p id="confirm-text" class="dim"></p>
+      <div class="menu-row">
+        <button id="btn-confirm-yes" class="btn danger">Confirm</button>
+        <button id="btn-confirm-no" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <!-- Play HUD -->
+  <div id="hud" hidden>
+    <header id="hud-top" class="hud-top">
+      <div class="hud-group">
+        <button id="btn-hud-pause" class="icon-btn" aria-label="Pause">❚❚</button>
+        <div class="hud-objective">
+          <span id="hud-title" class="hud-title">—</span>
+          <span id="hud-mode" class="hud-mode">—</span>
+        </div>
+      </div>
+      <div class="hud-group hud-status">
+        <span id="hud-timer" class="hud-pill" title="Elapsed / remaining" hidden>0:00</span>
+        <span id="hud-moves" class="hud-pill" title="Actions remaining" hidden>—</span>
+        <span id="hud-errors" class="hud-pill danger" title="Errors" hidden>0</span>
+        <span id="hud-progress" class="hud-pill" title="Progress">0%</span>
+      </div>
+    </header>
+
+    <aside id="rail-left" class="rail" aria-label="Objective and progress">
+      <h2 class="rail-h">Objective</h2>
+      <p id="objective-text">Fill every cell with its target color.</p>
+      <div class="progress-track" role="progressbar" aria-label="Canvas progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
+        <div id="progress-fill"></div>
+      </div>
+      <p id="progress-detail" class="dim">0 / 0 cells</p>
+      <p id="combo-text" class="combo" aria-live="off"></p>
+      <div id="lesson-box" class="lesson-box" hidden>
+        <h3 id="lesson-title"></h3>
+        <p id="lesson-text"></p>
+      </div>
+    </aside>
+
+    <aside id="rail-right" class="rail" aria-label="Actions">
+      <h2 class="rail-h">Tools</h2>
+      <div class="tool-col" role="group" aria-label="Tools">
+        <button id="tool-brush" class="btn tool" aria-pressed="true">Brush <kbd>B</kbd></button>
+        <button id="tool-region" class="btn tool" aria-pressed="false">Region <kbd>R</kbd></button>
+      </div>
+      <div class="tool-col" role="group" aria-label="Round actions">
+        <button id="btn-undo" class="btn">Undo <kbd>U</kbd></button>
+        <button id="btn-hint" class="btn">Hint <kbd>H</kbd></button>
+      </div>
+      <div class="tool-col" role="group" aria-label="Camera">
+        <button id="btn-zoom-in" class="btn" aria-label="Zoom in">＋</button>
+        <button id="btn-zoom-out" class="btn" aria-label="Zoom out">－</button>
+        <button id="btn-cam-reset" class="btn">Fit <kbd>C</kbd></button>
+        <button id="btn-pan-mode" class="btn tool" aria-pressed="false">Pan</button>
+      </div>
+      <div id="board-status" class="dim"></div>
+    </aside>
+
+    <div id="tray" class="tray">
+      <div id="hud-palette" class="palette" role="radiogroup" aria-label="Color palette" tabindex="0"></div>
+    </div>
+
+    <div id="drawer-left" class="drawer" hidden></div>
+    <div id="drawer-right" class="drawer" hidden></div>
+    <button id="btn-drawer-left" class="drawer-tab left" aria-label="Open objective panel" hidden>◧</button>
+    <button id="btn-drawer-right" class="drawer-tab right" aria-label="Open tools panel" hidden>◨</button>
+  </div>
+
+  <!-- Countdown -->
+  <div id="countdown" class="countdown" aria-live="assertive" hidden></div>
+
+  <!-- Accessibility mirrors -->
+  <div id="live" class="sr-only" aria-live="polite"></div>
+  <div id="alerts" class="sr-only" aria-live="assertive"></div>
+  <div id="captions" class="captions" aria-live="polite" hidden></div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

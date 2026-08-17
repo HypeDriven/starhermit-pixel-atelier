@@ -1,0 +1,12 @@
+{
+  "name": "pixel-atelier",
+  "version": "1.0.0",
+  "description": "Color indexed pixel cells on a neon drafting table to reveal animated pixel art.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run.mjs"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
