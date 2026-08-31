@@ -331,7 +331,7 @@ export class UI {
       b.textContent = `🏅 ${a.name}`;
       ach.appendChild(b);
     }
-    const bm = $('board-mini');
+    const bm = $('results-board');
     bm.textContent = '';
     if (boardPreview) {
       const p = document.createElement('p');

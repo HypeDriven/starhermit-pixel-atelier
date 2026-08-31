@@ -40,6 +40,7 @@ const MIME = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
+  '.opus': 'audio/ogg',
 };
 
 // ---------------------------------------------------------------------------

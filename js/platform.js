@@ -36,9 +36,8 @@ export class Platform {
     } catch {
       this.hosted = false; // static/offline hosting → guest mode
     }
-    if (this.hosted) {
-      try { this.profile = await this.get('/profile'); } catch { this.profile = null; }
-    }
+    // The bundled server has no /profile route (it only derives an opaque
+    // profile id), so there is no host display name to adopt here.
     return this;
   }
 
@@ -148,7 +147,7 @@ export class Platform {
   }
   async cloudSave(doc) {
     if (!this.hosted) return null;
-    try { return await this.put('/save', doc); } catch { return null; }
+    try { return await this.put('/save', { doc }); } catch { return null; }
   }
 
   // --- presence + activity (playtime accuracy) ---

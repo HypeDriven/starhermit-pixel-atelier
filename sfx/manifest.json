@@ -1,0 +1,104 @@
+[
+  {
+    "name": "ui-tap",
+    "seconds": 1,
+    "prompt": "Short crisp UI tap click, like a fingertip tapping a glass tablet button.",
+    "event": "ui.tap"
+  },
+  {
+    "name": "ui-back",
+    "seconds": 1,
+    "prompt": "Soft low-pitched UI back-navigation blip, a gentle descending wooden tick.",
+    "event": "ui.back"
+  },
+  {
+    "name": "ui-open",
+    "seconds": 1,
+    "prompt": "Light airy UI panel opening swoosh with a small bright chime tail.",
+    "event": "ui.open"
+  },
+  {
+    "name": "select-confirm",
+    "seconds": 1,
+    "prompt": "Clean bright selection confirm ping, like tapping a small brass bell once.",
+    "event": "select"
+  },
+  {
+    "name": "brush-fill",
+    "seconds": 1,
+    "prompt": "Wet paintbrush dab pressing onto canvas with a soft bristle thock.",
+    "event": "fill.brush"
+  },
+  {
+    "name": "drag-fill",
+    "seconds": 1,
+    "prompt": "Short paintbrush drag stroke swiping across dry canvas.",
+    "event": "fill.drag"
+  },
+  {
+    "name": "region-fill",
+    "seconds": 2,
+    "prompt": "Broad paint roller wash sweeping across a canvas region, ending with a soft splash.",
+    "event": "fill.region"
+  },
+  {
+    "name": "error-buzz",
+    "seconds": 1,
+    "prompt": "Low gritty wrong-answer buzzer, a short electric hum with a dull knock.",
+    "event": "error"
+  },
+  {
+    "name": "invalid-deny",
+    "seconds": 1,
+    "prompt": "Muted denied-action thunk, like a rubber stamp hitting a padded desk.",
+    "event": "invalid"
+  },
+  {
+    "name": "combo-chime",
+    "seconds": 2,
+    "prompt": "Ascending cascade of bright crystalline chimes for a combo streak.",
+    "event": "combo"
+  },
+  {
+    "name": "undo-sweep",
+    "seconds": 1,
+    "prompt": "Quick reverse tape-rewind whoosh, a downward sliding swoosh.",
+    "event": "undo"
+  },
+  {
+    "name": "hint-sparkle",
+    "seconds": 1,
+    "prompt": "Delicate magical sparkle of two tiny glass bells for a hint reveal.",
+    "event": "hint"
+  },
+  {
+    "name": "pause-click",
+    "seconds": 1,
+    "prompt": "Gentle mechanical pause click, like a camera shutter half-press.",
+    "event": "pause"
+  },
+  {
+    "name": "resume-click",
+    "seconds": 1,
+    "prompt": "Light uplifting resume click, like a small latch releasing.",
+    "event": "resume"
+  },
+  {
+    "name": "lesson-step",
+    "seconds": 1,
+    "prompt": "Friendly two-note lesson advance chime, soft marimba tones.",
+    "event": "lesson.step"
+  },
+  {
+    "name": "complete-fanfare",
+    "seconds": 3,
+    "prompt": "Triumphant short completion fanfare of rising brass-like tones with a sparkle tail.",
+    "event": "complete"
+  },
+  {
+    "name": "failed-fall",
+    "seconds": 2,
+    "prompt": "Sad descending three-note fall, a muted trombone-like wah.",
+    "event": "failed"
+  }
+]

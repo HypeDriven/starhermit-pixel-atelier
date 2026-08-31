@@ -21,8 +21,9 @@ function springStep(current, target, velocity, smoothTime, dt) {
   const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
   const change = current - target;
   const temp = (velocity + omega * change) * dt;
-  const newVel = (velocity - omega * temp) * exp;
-  const out = change + temp > 0 ? target + (change + temp) * exp : target + (change + temp) * exp;
+  let newVel = (velocity - omega * temp) * exp;
+  let out = target + (change + temp) * exp;
+  if (change > 0 === out > target) { out = target; newVel = 0; } // clamp overshoot
   return [out, newVel];
 }
 

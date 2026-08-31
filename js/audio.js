@@ -2,6 +2,31 @@
 // material impacts, quiet ambience, adaptive generative music. Buses:
 // music / effects / ambience / voice, each with its own volume.
 // Variant pitch is derived from the caller (seeded) for replay consistency.
+//
+// Authored one-shots (sfx/<name>.opus, see sfx/manifest.json) are lazy-
+// fetched and decoded per event; the procedural synthesis below stays the
+// fallback while a clip is still loading or could not be fetched/decoded.
+
+// Logical event → authored sample basename (every manifest entry appears here).
+const SFX_SAMPLES = {
+  'ui.tap': 'ui-tap',
+  'ui.back': 'ui-back',
+  'ui.open': 'ui-open',
+  select: 'select-confirm',
+  'fill.brush': 'brush-fill',
+  'fill.drag': 'drag-fill',
+  'fill.region': 'region-fill',
+  error: 'error-buzz',
+  invalid: 'invalid-deny',
+  combo: 'combo-chime',
+  undo: 'undo-sweep',
+  hint: 'hint-sparkle',
+  pause: 'pause-click',
+  resume: 'resume-click',
+  'lesson.step': 'lesson-step',
+  complete: 'complete-fanfare',
+  failed: 'failed-fall',
+};
 
 export class AudioEngine {
   constructor() {
@@ -14,6 +39,7 @@ export class AudioEngine {
     this._music = null;
     this._noiseBuf = null;
     this.hapticsEnabled = true;
+    this._sfx = new Map(); // name → { state: 'loading'|'ready'|'failed', buffer }
   }
 
   // Must be called from a user gesture at least once.
@@ -70,55 +96,103 @@ export class AudioEngine {
 
   // ------------------------------------------------------------------
   // Event sounds — original short transients tied to logical events.
+  // Each event first tries its authored sample (SFX_SAMPLES); the
+  // synthesis in each case runs only while the clip is loading/failed.
   // ------------------------------------------------------------------
+
+  // Lazy-fetch + decode + cache sfx/<name>.opus. Only ever called after
+  // ensure() succeeded (i.e. after the user-gesture unlock). Returns the
+  // decoded AudioBuffer, or null while loading / on failure.
+  _sfxBuffer(name) {
+    if (!this.ctx) return null;
+    let entry = this._sfx.get(name);
+    if (!entry) {
+      entry = { state: 'loading', buffer: null };
+      this._sfx.set(name, entry);
+      fetch(`sfx/${name}.opus`)
+        .then((r) => {
+          if (!r.ok) throw new Error(`sfx ${name}: ${r.status}`);
+          return r.arrayBuffer();
+        })
+        .then((ab) => this.ctx.decodeAudioData(ab))
+        .then((buf) => { entry.buffer = buf; entry.state = 'ready'; })
+        .catch(() => { entry.state = 'failed'; });
+      return null;
+    }
+    return entry.state === 'ready' ? entry.buffer : null;
+  }
+
+  // Play a cached sample through the effects bus (bus gain + master mute
+  // already apply). Returns false when the clip is not ready yet.
+  _playSample(name) {
+    const buffer = this._sfxBuffer(name);
+    if (!buffer) return false;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.buses.effects);
+    src.start();
+    return true;
+  }
+
   play(event, opts = {}) {
     if (!this.ctx || this.muted) return;
-    const t = this.ctx.currentTime;
     const v = opts.variant ?? 0.5; // 0..1 seeded variant → ±5% pitch
     const bend = 1 + (v - 0.5) * 0.1;
+    const sample = SFX_SAMPLES[event];
+    const sampled = sample ? this._playSample(sample) : false;
     switch (event) {
-      case 'ui.tap': this._blip('effects', 660 * bend, 0.05, 'square', 0.12); break;
-      case 'ui.back': this._blip('effects', 440 * bend, 0.06, 'square', 0.1); break;
-      case 'ui.open': this._blip('effects', 520 * bend, 0.07, 'triangle', 0.12); break;
-      case 'select': this._blip('effects', 880 * bend, 0.04, 'sine', 0.14); break;
+      case 'ui.tap': if (!sampled) this._blip('effects', 660 * bend, 0.05, 'square', 0.12); break;
+      case 'ui.back': if (!sampled) this._blip('effects', 440 * bend, 0.06, 'square', 0.1); break;
+      case 'ui.open': if (!sampled) this._blip('effects', 520 * bend, 0.07, 'triangle', 0.12); break;
+      case 'select': if (!sampled) this._blip('effects', 880 * bend, 0.04, 'sine', 0.14); break;
       case 'fill.brush':
-        this._thock(190 * bend, 0.16);
-        this._noiseBurst(900, 0.05, 0.08);
+        if (!sampled) {
+          this._thock(190 * bend, 0.16);
+          this._noiseBurst(900, 0.05, 0.08);
+        }
         break;
       case 'fill.drag':
-        this._thock(160 * bend, 0.12);
-        this._noiseBurst(700, 0.04, 0.06);
+        if (!sampled) {
+          this._thock(160 * bend, 0.12);
+          this._noiseBurst(700, 0.04, 0.06);
+        }
         break;
       case 'fill.region':
-        this._sweep('effects', 1400, 300, 0.22, 0.14);
-        this._thock(140, 0.2);
+        if (!sampled) {
+          this._sweep('effects', 1400, 300, 0.22, 0.14);
+          this._thock(140, 0.2);
+        }
         break;
       case 'error':
-        this._blip('effects', 110, 0.14, 'sawtooth', 0.16);
-        this._blip('effects', 104, 0.16, 'sawtooth', 0.12, 0.02);
+        if (!sampled) {
+          this._blip('effects', 110, 0.14, 'sawtooth', 0.16);
+          this._blip('effects', 104, 0.16, 'sawtooth', 0.12, 0.02);
+        }
         this.caption('That cell does not take this color.');
         this.haptic([20, 30, 20]);
         break;
-      case 'invalid': this._blip('effects', 220, 0.07, 'square', 0.1); break;
+      case 'invalid': if (!sampled) this._blip('effects', 220, 0.07, 'square', 0.1); break;
       case 'combo': {
         const tier = Math.min(4, opts.tier ?? 1);
-        this._chime([523, 659, 784, 1047].slice(0, 2 + tier), 0.05, 0.1);
+        if (!sampled) this._chime([523, 659, 784, 1047].slice(0, 2 + tier), 0.05, 0.1);
         if (tier >= 3) this.caption(`Combo ${opts.combo ?? ''}`.trim());
         break;
       }
-      case 'undo': this._sweep('effects', 600, 240, 0.12, 0.1); break;
-      case 'hint': this._chime([1175, 1568], 0.07, 0.08); break;
-      case 'pause': this._blip('effects', 330, 0.09, 'triangle', 0.12); break;
-      case 'resume': this._blip('effects', 494, 0.09, 'triangle', 0.12); break;
-      case 'lesson.step': this._chime([784, 988], 0.06, 0.12, 'voice'); break;
+      case 'undo': if (!sampled) this._sweep('effects', 600, 240, 0.12, 0.1); break;
+      case 'hint': if (!sampled) this._chime([1175, 1568], 0.07, 0.08); break;
+      case 'pause': if (!sampled) this._blip('effects', 330, 0.09, 'triangle', 0.12); break;
+      case 'resume': if (!sampled) this._blip('effects', 494, 0.09, 'triangle', 0.12); break;
+      case 'lesson.step': if (!sampled) this._chime([784, 988], 0.06, 0.12, 'voice'); break;
       case 'complete':
-        this._chime([523, 659, 784, 1047, 1319], 0.12, 0.16);
-        this._noiseBurst(4000, 0.5, 0.05, 0.15);
+        if (!sampled) {
+          this._chime([523, 659, 784, 1047, 1319], 0.12, 0.16);
+          this._noiseBurst(4000, 0.5, 0.05, 0.15);
+        }
         this.caption('Canvas complete!');
         this.haptic([30, 40, 30, 40, 60]);
         break;
       case 'failed':
-        this._chime([392, 330, 262], 0.16, 0.14);
+        if (!sampled) this._chime([392, 330, 262], 0.16, 0.14);
         this.caption('Round over.');
         break;
       default: break;
