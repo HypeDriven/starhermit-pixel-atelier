@@ -9,7 +9,12 @@ alongside the game's own test suite and a headless-Chrome boot/mode/crawl sweep.
 | --- | --- |
 | `npm test` | 4109 assertions pass, 0 failed ("ALL TESTS PASSED") |
 | `node --check` on all modules | clean (11 modules + `server.js`) |
-| `tests/e2e.mjs` (headless Chrome) | not present — replaced by an ad-hoc CDP boot/mode/crawl sweep (see below) |
+| `tests/e2e.mjs` (headless Chrome) | **present — PASS** (desktop + mobile, no page errors). Re-verified 2026-09-04 after the `server.js` fix below. |
+
+> **Re-verified 2026-09-04:** All four confirmed defects below were re-confirmed **already fixed
+> in the current source** (no code change needed) and the full suite is green. Suspected defect 2
+> was confirmed as a **real, reproducible defect** and fixed this pass (see below). `npm test`
+> (4109 pass) and `node tests/e2e.mjs` (E2E PASS) both run clean.
 
 Ad-hoc headless-Chrome coverage: boot, all six title mode buttons, a round started via
 `btn-setup-start` and driven through hint/undo/pause/resume/resize, a **journey stage completed**
@@ -23,6 +28,9 @@ and the ranked **Daily completed** (all 144 cells filled through the session's o
 
 > **Fixed 2026-08-26.** All four defects below were fixed; `npm test` passes
 > (4109 assertions, 0 failed) and `node --check` is clean on the changed files.
+> **Re-verified 2026-09-04:** each fix below was confirmed still present in the current
+> source (e.g. `js/render.js:26`, `js/platform.js:39-41`/`150`, `js/ui.js:334`) and
+> `npm test` + `tests/e2e.mjs` both pass. No further code change was needed for 1-4.
 
 Defects below were each verified by reading the source, not just reported by the model.
 
@@ -141,6 +149,29 @@ server's required `body.doc` shape (and the read path's `remote?.doc` check).
 - **Evidence:** Headless-Chrome network log after completing a round:
   `400 http://127.0.0.1:39504/api/v1/save`, alongside the client/server shapes quoted above.
 
+### 5. `POST /scores` completion check passes when `verdict.result` is absent (was suspected #2)
+
+**RESOLVED 2026-09-04.** Confirmed as a real defect and fixed.
+
+- **File:** `server.js:174` (was `server.js:173-175`)
+- **Trigger:** Submitting any round for a ranked board whose replay verifies but did **not**
+  reach `complete` (e.g. `status === 'active'`, `state.final === null`).
+- **Behaviour:** `if (verdict.status !== 'complete' && verdict.result?.progressPct < 1)` — when
+  `verdict.result` is `null`/`undefined` the comparison is `undefined < 1`, i.e. `false`, so the
+  guard's second clause short-circuits to false and the incomplete round is NOT rejected,
+  bypassing the intended `incomplete-round` 422.
+- **Why it was previously unconfirmed:** `Session.verify` was assumed always to return a `result`
+  when `ok` is true. It does not when the round is partial.
+- **Expected:** `incomplete-round` (spec.md:38/`server.js` scoring) — a non-`complete` round must
+  be rejected.
+- **Fix:** `server.js:174` now evaluates `(verdict.result?.progressPct ?? 0) < 1`, so a missing
+  `result` (or 0 progress) is treated as incomplete and rejected, while a genuinely complete round
+  (`status === 'complete'`, `progressPct = 100`) still short-circuits the first clause and passes.
+- **Verified 2026-09-04:** replayed the real `dailyContent` — partial (5 fills) → `[status active,
+  result null]` and the guard now rejects (`true`); full completion → `[status complete,
+  progressPct 100]` and the guard passes (`false`). `npm test` (4109 pass) and `node tests/e2e.mjs`
+  (E2E PASS) both green.
+
 ## Suspected — not confirmed
 
 ### 1. `progressPct` is a non-integer stored in the result and used as the primary board key
@@ -153,16 +184,15 @@ server's required `body.doc` shape (and the read path's `remote?.doc` check).
   units; format values only in presentation."
 - **Why unconfirmed:** A percentage is arguably a presentation value rather than a simulation
   unit, and no rounding artefact was observed in the passing golden tests.
+- **Re-checked 2026-09-04 — still left as suspected:** the value comes from a single deterministic
+  `Math.round` expression, so any two entries with the same number of correct cells compute
+  byte-identical `progressPct` floats (no drift/precision artefact can change an ordering in
+  `compareResults`), and it is not a simulation unit. No reproducible functional defect was found,
+  so no code was changed.
 
-### 2. `POST /scores` completion check passes when `verdict.result` is absent
-
-- **File:** `server.js:173-175`
-- **Concern:** `if (verdict.status !== 'complete' && verdict.result?.progressPct < 1)` — when
-  `verdict.result` is `undefined` the comparison is `undefined < 1`, i.e. `false`, so an
-  incomplete round would be accepted.
-- **Why unconfirmed:** `Session.verify` appears always to return a `result` when `ok` is true
-  (`js/session.js:133-166`), so no input reaching this line with a missing `result` could be
-  constructed.
+> **Note:** the former suspected item 2 (`POST /scores` completion check passes when
+> `verdict.result` is absent) was **confirmed as a real, reproducible defect and fixed 2026-09-04**
+> — see the Resolved entry under "Confirmed defects" above.
 
 ## Checked, no defects found
 

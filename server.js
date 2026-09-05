@@ -171,7 +171,7 @@ const routes = {
     if (!verdict.ok) return err(res, 422, `replay-${verdict.error}`);
     const cells = content.width * content.height;
     if (verdict.elapsedMs < cells * 80) return err(res, 422, 'implausible-speed');
-    if (verdict.status !== 'complete' && verdict.result?.progressPct < 1) {
+    if (verdict.status !== 'complete' && (verdict.result?.progressPct ?? 0) < 1) {
       return err(res, 422, 'incomplete-round');
     }
 
