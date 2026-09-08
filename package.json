@@ -8,6 +8,7 @@
     "test": "node tests/run.mjs",
     "test:e2e": "node tests/e2e.mjs"
   },
-  "license": "UNLICENSED",
-  "private": true
+  "license": "SEE LICENSE IN LICENSE.md",
+  "private": true,
+  "devDependencies": { "playwright-core": "^1.62.1" }
 }

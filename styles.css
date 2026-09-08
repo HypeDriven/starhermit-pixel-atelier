@@ -186,6 +186,7 @@ body.high-contrast {
 .board-list { padding-left: 24px; }
 .board-list li { padding: 6px 4px; border-bottom: 1px solid var(--edge); font-variant-numeric: tabular-nums; }
 .board-list li.me { color: var(--accent-a); font-weight: 700; }
+.board-list li.empty { list-style: none; color: var(--dim); }
 
 /* ------------------------------------------------------------- profile --- */
 .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }

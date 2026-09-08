@@ -306,7 +306,10 @@ function applyUndo(state) {
     state.filled[c] = 0;
     state.wrong[c] = inverse.wrongBefore[i];
   }
-  state.stats = { ...inverse.statsBefore, undos: inverse.statsBefore.undos + 1 };
+  // Only the fill's own effects are reverted. Counters that accrued after it
+  // (hints taken, undos spent) are not undoable, so they carry forward —
+  // otherwise a hint could be paid for and then rolled back by an undo.
+  state.stats = { ...inverse.statsBefore, hints: state.stats.hints, undos: state.stats.undos + 1 };
   state.seqColor = inverse.seqBefore;
   state.tick += 1;
   return { ok: true, events: [{ type: 'undo', cells: inverse.cells.slice() }] };

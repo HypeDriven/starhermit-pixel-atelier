@@ -101,6 +101,8 @@ class App {
       }
       await this.syncCloudSave();
     }
+    // Resolve cloud revisions before changing the local revision for this boot.
+    this.store.update((d) => { d.stats.sessions += 1; });
 
     this.ui.setBoot(0.6, 'Validating content…');
     await frame();
@@ -1371,9 +1373,10 @@ class App {
   }
 
   // -------------------------------------------------------------- boards ---
-  showBoard(boardId, scope = 'global') {
+  showBoard(boardId, scope = 'global', label = null) {
     this._boardId = boardId || this._boardId || boardIdFor({ mode: 'score-chase', id: `chase-${this.platform.isoWeekString()}` });
     this._boardScope = scope;
+    if (label) this._boardLabel = label;
     const local = (this.store.loadBoards()[this._boardId] || []).map((e) => ({ ...e }));
     const friends = new Set([this.store.data.profile.name, ...(this.store.data.rivals || []).map((r) => r.name)]);
     const render = (entries, note) => {
@@ -1381,7 +1384,7 @@ class App {
       this.ui.renderBoard(filtered.sort(compareBoardEntries), scope, note, this.store.data.profile.name);
     };
     $('board-h').textContent = 'Leaderboard';
-    $('board-sub').textContent = `Board ${this._boardId}`;
+    $('board-sub').textContent = this._boardLabel || `Board ${this._boardId}`;
     if (this.platform.hosted) {
       this.platform.leaderboard(this._boardId, 'global')
         .then((res) => render(res.entries || local, 'Validated global board.'))
@@ -1475,6 +1478,15 @@ class App {
       },
       onCloudSync: () => this.syncCloudSave().then(() => this.ui.toast('Cloud save synced.')),
       onBoardScope: (scope) => this.showBoard(this._boardId, scope),
+      onShowBoard: (which) => {
+        const week = this.platform.isoWeekString();
+        const weekly = boardIdFor({ mode: 'score-chase', id: `chase-${week}` });
+        if (which === 'round' && this._lastBoardId) {
+          this.showBoard(this._lastBoardId, 'global', this.content?.meta.title || 'This canvas');
+        } else {
+          this.showBoard(weekly, 'global', `Score Chase — week ${week}`);
+        }
+      },
     };
   }
 

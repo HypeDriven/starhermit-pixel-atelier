@@ -101,6 +101,17 @@ section('rules: legal actions + invalid reasons');
   eq(s.state.stats.correct, before - 1, 'undo reverts correct');
   eq(s.state.filled[8], 0, 'undo clears cell');
 
+  // A hint taken after a fill survives undoing that fill — the hint penalty
+  // must not be refundable by rolling the board back.
+  r = s.fill(8, 2, 'brush'); ok(r.ok, 'fill again before hint');
+  const hintsBefore = s.state.stats.hints;
+  s.hint();
+  eq(s.state.stats.hints, hintsBefore + 1, 'hint counted');
+  const undosBefore = s.state.stats.undos;
+  s.undo();
+  eq(s.state.stats.hints, hintsBefore + 1, 'undo keeps the hint count');
+  eq(s.state.stats.undos, undosBefore + 1, 'undo counts itself');
+
   // Hint uses the legal-action API.
   r = s.hint();
   ok(r.ok && r.events[0].hint, 'hint returns an action');
@@ -414,8 +425,12 @@ section('storage: checksum, migration, corruption');
   eq(SaveStore.resolveRevision(doc, doc), 'local', 'same → local');
   const older = { ...doc, rev: doc.rev - 1, checksum: 'x' };
   eq(SaveStore.resolveRevision(doc, older), 'local', 'newer local wins');
-  const conflict = { ...doc, checksum: 'different' };
+  const conflict = { ...doc, data: { ...doc.data, stats: { ...doc.data.stats, cellsFilled: 777 } }, checksum: 'different' };
   eq(SaveStore.resolveRevision(doc, conflict), 'conflict', 'same rev diff content → conflict');
+  // Re-wrapping the same data stamps a new updatedAt (and so a new wrapper
+  // checksum); that must not read as a conflict.
+  const rewrapped = { ...doc, updatedAt: doc.updatedAt + 1000, checksum: 'stale' };
+  eq(SaveStore.resolveRevision(doc, rewrapped), 'local', 'same rev + same data → local');
 }
 
 // ---------------------------------------------------------------------------

@@ -135,6 +135,10 @@ export class SaveStore {
     if (remoteDoc.rev > localDoc.rev) return 'remote';
     if (localDoc.rev > remoteDoc.rev) return 'local';
     if (localDoc.checksum === remoteDoc.checksum) return 'local';
+    // Same revision: the wrapper checksum also covers `updatedAt`, which is
+    // stamped fresh by every wrap(), so compare the payloads themselves —
+    // otherwise an unchanged save looks like a conflict on every sync.
+    if (checksumOf(localDoc.data) === checksumOf(remoteDoc.data)) return 'local';
     return 'conflict'; // same revision, different content → ask the player
   }
 

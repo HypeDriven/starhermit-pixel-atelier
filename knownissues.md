@@ -1,5 +1,49 @@
 # Known Issues — Pixel Atelier
 
+## QA pass 2026-09-07 (Opus 5) — fixed this pass
+
+All seven items below were confirmed by reading the source and reproducing the behaviour,
+then fixed. `npm test` (4114 assertions, 0 failed), `node tests/e2e.mjs` (desktop + mobile,
+no page errors) and a targeted headless-Chrome smoke pass are green afterwards.
+
+1. **Background music never played.** `AudioEngine.startMusic` called `scheduleAhead()` *before*
+   assigning `this._music`, and the scheduler's first line is `if (!this._music) return`. The
+   first pass bailed, so no `setTimeout` was ever armed and no chord was scheduled — while
+   `this._music` was left truthy, which also suppressed the `startMusic` retry at
+   `js/main.js` round start. Fixed by assigning `this._music = state` first
+   (`js/audio.js`). Verified in Chrome: `_music.step` advances 1 → 2 with the timer armed.
+2. **Spurious "Save conflict" dialog on every hosted boot.** `wrap()` stamps a fresh
+   `updatedAt` into the body it checksums, so `exportDoc()` produces a different checksum for
+   byte-identical data. `SaveStore.resolveRevision` compared wrapper checksums, so an unchanged
+   save at the same revision resolved to `conflict` and prompted the player on each sync.
+   Reproduced in Node (`resolution: conflict` for two exports of one save). Fixed by falling
+   back to a payload comparison (`js/storage.js`); the unit test that claimed to cover this
+   passed identical data with a tampered checksum and now uses genuinely different data, plus a
+   new case for the re-wrap.
+3. **Undo refunded the hint penalty.** `applyUndo` restored `stats` wholesale from the
+   pre-fill snapshot, so `hint` → `undo` erased the hint from the score (`js/rules.js`).
+   Hints and undos now carry forward across an undo; covered by a new unit test.
+4. **The server published its own JSON stores as static files.** `GET /data/saves.json`
+   returned every profile's cloud save, and `leaderboards.json` carried the replay envelopes
+   the API deliberately strips. `server.js` now answers 403 for anything under `data/`
+   (verified: 403 for `/data/presence.json`, `/data/`, `/./data/presence.json`; 200 for
+   `/` and `/js/main.js`). `data/` is also gitignored now — it is server runtime state.
+5. **The leaderboard screen was unreachable.** Nothing called `App.showBoard` except the
+   scope tabs *inside* that screen, so the board UI required by spec.md §"Achievements and
+   leaderboards" could not be opened at all. Added a Leaderboard button to the title menu
+   (weekly Score Chase board) and to the results screen (the round's own board), and gave the
+   screen a readable subtitle instead of the raw board hash.
+6. **Double rank numbers on the board list.** `renderBoard` prefixed `${i + 1}.` inside an
+   `<ol>` that already renders markers ("1. 1. Guest — …"). The manual prefix is gone and the
+   empty-state row no longer takes a rank marker.
+7. **Title menu row overflowed on mobile.** With the added button the fixed-width row clipped
+   and overlapped its labels at 390 px. The row now uses the existing `.menu-row.wrap`.
+
+Also: `stats.sessions` was in the save shape and shown on the Profile screen but never
+incremented, so it always read 0 — it is now counted once per boot. `LICENSE.md` (PolyForm
+Noncommercial 1.0.0) was missing and has been added; `package.json` no longer claims
+`UNLICENSED`.
+
 QA pass 2026-08-20. Static review driven by Qwen3.8 27B on spark105 (OBLITERATED Q5_K_M),
 alongside the game's own test suite and a headless-Chrome boot/mode/crawl sweep.
 

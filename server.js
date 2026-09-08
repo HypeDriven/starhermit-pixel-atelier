@@ -293,6 +293,9 @@ const server = createServer(async (req, res) => {
     // Static files, traversal-safe.
     let path = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '');
     if (path.startsWith('..') || path.includes('\0')) return err(res, 403, 'forbidden');
+    // The JSON stores hold cloud saves, replay envelopes and presence — they
+    // are reachable through the API routes only, never as static files.
+    if (/^data([/\\]|$)/.test(path)) return err(res, 403, 'forbidden');
     if (path === '' || path === '.') path = 'index.html';
     const file = join(ROOT, path);
     if (!file.startsWith(ROOT) || !existsSync(file)) return err(res, 404, 'not-found');

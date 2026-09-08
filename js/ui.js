@@ -30,6 +30,7 @@ export class UI {
     $('btn-chase').addEventListener('click', () => handlers.onMode?.('score-chase'));
     $('btn-learn').addEventListener('click', () => handlers.onMode?.('learn'));
     $('btn-profile').addEventListener('click', () => handlers.onShowProfile?.());
+    $('btn-boards').addEventListener('click', () => handlers.onShowBoard?.('weekly'));
     $('btn-settings').addEventListener('click', () => handlers.onShowSettings?.());
     $('btn-help').addEventListener('click', () => handlers.onShowHelp?.());
     $('btn-setup-start').addEventListener('click', () => handlers.onSetupStart?.());
@@ -56,6 +57,7 @@ export class UI {
     $('btn-results-next').addEventListener('click', () => handlers.onResultsNext?.());
     $('btn-results-retry').addEventListener('click', () => handlers.onResultsRetry?.());
     $('btn-results-replay').addEventListener('click', () => handlers.onResultsReplay?.());
+    $('btn-results-board').addEventListener('click', () => handlers.onShowBoard?.('round'));
 
     // Confirm dialog
     $('btn-confirm-yes').addEventListener('click', () => this._resolveConfirm(true));
@@ -406,13 +408,16 @@ export class UI {
     list.textContent = '';
     if (!entries.length) {
       const li = document.createElement('li');
+      li.className = 'empty';
       li.textContent = 'No scores yet — be the first.';
       list.appendChild(li);
     }
-    entries.slice(0, 20).forEach((e, i) => {
+    // The list is an <ol>, so ranks come from the list marker — never prefix
+    // a second number here.
+    entries.slice(0, 20).forEach((e) => {
       const li = document.createElement('li');
       if (e.name === meName) li.className = 'me';
-      li.textContent = `${i + 1}. ${e.name} — ${e.score} (${Math.round(e.progressPct)}%, ${e.errors} errors, ${fmtTime(e.elapsedMs)})`;
+      li.textContent = `${e.name} — ${e.score} (${Math.round(e.progressPct)}%, ${e.errors} errors, ${fmtTime(e.elapsedMs)})`;
       list.appendChild(li);
     });
     $('board-tab-global').setAttribute('aria-selected', String(scope === 'global'));

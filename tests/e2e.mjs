@@ -278,6 +278,23 @@ async function runPass(browser, name, ctxOpts, { full }) {
     await page.waitForFunction(() => !!window.__app && window.__app.appState === 'title');
     await page.screenshot({ path: SHOT('title', name) });
     ok(`${name}: title screen visible (appState=${(await page.evaluate(() => window.__app.appState))})`);
+    await page.click('#btn-boards');
+    await page.waitForSelector('#screen-board:not([hidden])');
+    if (!/Score Chase/.test(await page.textContent('#board-sub'))) throw new Error('weekly board missing');
+    await page.click('#screen-board [data-nav="title"]');
+    await page.waitForSelector('#screen-title:not([hidden])');
+    await page.waitForFunction(() => window.__app.audio._music?.step > 0);
+    const musicStep = await page.evaluate(() => window.__app.audio._music.step);
+    await page.waitForFunction(step => window.__app.audio._music.step > step, musicStep);
+    const caption = await page.evaluate(() => {
+      const app = window.__app;
+      app.audio.setMuted(true);
+      app.audio.play('complete');
+      const text = document.querySelector('#captions').textContent;
+      app.audio.setMuted(false);
+      return text;
+    });
+    if (!/Canvas complete/.test(caption)) throw new Error('muted caption missing');
 
     if (full) {
       await startCalmPractice(page);
@@ -354,6 +371,9 @@ async function runPass(browser, name, ctxOpts, { full }) {
       });
       if (!progress || !(progress.roundsCompleted > 0)) throw new Error('completion not persisted: ' + JSON.stringify(progress));
       ok(`${name}: progress persisted (roundsCompleted: ${progress.roundsCompleted})`);
+      await page.click('#btn-results-board');
+      await page.waitForSelector('#screen-board:not([hidden])');
+      if (!/100%/.test(await page.textContent('#board-list'))) throw new Error('completed round missing from board');
     } else {
       // mobile: load → practice → tap a few real cells via touchscreen.tap
       await startCalmPractice(page);

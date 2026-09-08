@@ -135,11 +135,13 @@ export class AudioEngine {
   }
 
   play(event, opts = {}) {
-    if (!this.ctx || this.muted) return;
+    if (!this.ctx) return;
     const v = opts.variant ?? 0.5; // 0..1 seeded variant → ±5% pitch
     const bend = 1 + (v - 0.5) * 0.1;
     const sample = SFX_SAMPLES[event];
-    const sampled = sample ? this._playSample(sample) : false;
+    // Muted skips every audible layer but still runs captions and haptics —
+    // those are the accessibility substitutes for sound, not sound itself.
+    const sampled = this.muted || (sample ? this._playSample(sample) : false);
     switch (event) {
       case 'ui.tap': if (!sampled) this._blip('effects', 660 * bend, 0.05, 'square', 0.12); break;
       case 'ui.back': if (!sampled) this._blip('effects', 440 * bend, 0.06, 'square', 0.1); break;
@@ -355,8 +357,9 @@ export class AudioEngine {
       }
       state.timer = setTimeout(scheduleAhead, 200);
     };
-    scheduleAhead();
+    // Assign before the first pass: scheduleAhead() bails when _music is unset.
     this._music = state;
+    scheduleAhead();
   }
 
   setMusicIntensity(v) {
