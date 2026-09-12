@@ -186,10 +186,12 @@ export class UI {
 
   setLesson(title, text) {
     const box = $('lesson-box');
-    if (!text) { box.hidden = true; return; }
+    const strip = $('lesson-strip');
+    if (!text) { box.hidden = true; if (strip) strip.hidden = true; return; }
     box.hidden = false;
     $('lesson-title').textContent = title;
     $('lesson-text').textContent = text;
+    if (strip) { strip.hidden = false; strip.textContent = text; }
   }
 
   setBoardStatus(text) { $('board-status').textContent = text; }

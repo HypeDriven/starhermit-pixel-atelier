@@ -701,9 +701,11 @@ class DraftingTableRenderer {
     this.raycaster.setFromCamera(this._ndc, this.camera);
     const hits = this.raycaster.intersectObject(this.pickPlane, false);
     if (!hits.length) return -1;
-    const p = this.pickPlane.worldToLocal(hits[0].point.clone());
+    // Work in the board group's space (x across, z down the rows): the plane's
+    // own local Y is the reversed board Z after its -90° X rotation.
+    const p = this.pickPlane.parent.worldToLocal(hits[0].point.clone());
     const x = Math.floor(p.x / CELL + this.w / 2);
-    const y = Math.floor(p.y / CELL + this.h / 2); // plane local y maps to board z
+    const y = Math.floor(p.z / CELL + this.h / 2);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return -1;
     return y * this.w + x;
   }

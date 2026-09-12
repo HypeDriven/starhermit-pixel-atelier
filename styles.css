@@ -361,10 +361,16 @@ input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
 
 /* ---------------------------------------------------- responsive rules --- */
 
+.lesson-strip { display: none; }
 /* Compact desktop / tablet: rails become drawers. */
 @media (max-width: 1023px) {
   #rail-left, #rail-right { display: none; } /* id specificity beats .rail flex */
   .drawer-tab { display: block; }
+  /* persistent compact lesson banner under the HUD (never inside the drawer) */
+  .lesson-strip { display: block; position: absolute; left: 50%; transform: translateX(-50%); top: calc(56px + var(--sat, 0px));
+    max-width: min(92vw, 34rem); margin: 0; padding: 6px 12px; border-radius: 10px; z-index: 6;
+    background: #0d2136; border: 1px solid var(--accent-a); font-size: 0.9rem; text-align: center; pointer-events: none; }
+  .lesson-strip[hidden] { display: none; }
 }
 
 /* Wide desktop: rails visible, drawer tabs hidden. */
