@@ -92,12 +92,14 @@ class App {
     this.applySettingsToDom();
 
     this.ui.setBoot(0.4, 'Contacting host…');
+    this.platform.onSyncStatus = (s) => this.ui.setSyncStatus(s);
     await this.platform.init();
     this.platform.setTelemetryConsent(this.store.data.settings.telemetryConsent);
     if (this.platform.hosted) {
-      this.platform.activityStart();
+      this.platform.activityStart(); // dev-server only; no-op on-platform
       if (this.platform.profile?.name && this.store.data.profile.guest) {
-        this.store.update((d) => { d.profile.name = this.platform.profile.name; });
+        // Adopt the account nickname (never a username) for display + boards.
+        this.store.update((d) => { d.profile.name = this.platform.profile.name; d.profile.guest = false; });
       }
       await this.syncCloudSave();
     }
@@ -645,7 +647,7 @@ class App {
     this.audio.play(complete ? 'complete' : 'failed');
     this.audio.setMusicIntensity(0);
     this.platform.track('round-end', { mode: this.mode, outcome: ev.status });
-    if (this.platform.hosted) this.platform.cloudSave(this.store.exportDoc());
+    if (this.platform.hosted) this.platform.cloudSaveSoon(this.store.exportDoc());
 
     // Leaderboards.
     const entry = boardEntryFromSession(this.session, this.store.data.profile.name);
@@ -681,7 +683,10 @@ class App {
         // self entry tracked implicitly by boards
       }
     });
-    if (this.content.meta.ranked && this.platform.hosted && !this._dailyExcluded) {
+    // Ranked submission only exists on the bundled dev server (local
+    // development). On-platform, leaderboards are platform-owned and clients
+    // can never submit — personal bests stay local + cloud-saved.
+    if (this.content.meta.ranked && this.platform.devMode && !this._dailyExcluded) {
       this.platform.submitScore(boardId, entry)
         .then((res) => {
           if (res?.rank) this.ui.toast(`Global board: #${res.rank}`);
@@ -689,7 +694,7 @@ class App {
         .catch(() => { /* local result already shown; labeled casual */ });
       preview += ' · submitted for validation';
     } else if (this.content.meta.ranked) {
-      preview += ' · casual (offline)';
+      preview += ' · casual (no validated board here)';
     }
     return preview;
   }
@@ -1354,20 +1359,20 @@ class App {
   // --------------------------------------------------------- cloud save ----
   async syncCloudSave() {
     const remote = await this.platform.cloudLoad();
-    if (!remote?.doc) return;
+    if (!remote) return;
     const localDoc = this.store.exportDoc();
-    const resolution = SaveStore.resolveRevision(localDoc, remote.doc);
+    const resolution = SaveStore.resolveRevision(localDoc, remote);
     if (resolution === 'remote') {
-      try { this.store.importDoc(remote.doc); } catch { /* keep local */ }
+      try { this.store.importDoc(remote); } catch { /* keep local */ }
     } else if (resolution === 'conflict') {
       const useRemote = await this.ui.confirm(
         'A different save exists in the cloud. Use the cloud copy? (Choose Cancel to keep this device\'s copy — both are preserved until you pick.)',
         'Save conflict'
       );
       if (useRemote) {
-        try { this.store.importDoc(remote.doc); } catch { /* keep local */ }
+        try { this.store.importDoc(remote); } catch { /* keep local */ }
       } else {
-        this.platform.cloudSave(this.store.exportDoc());
+        this.platform.cloudSaveSoon(this.store.exportDoc());
       }
     }
   }
@@ -1379,14 +1384,23 @@ class App {
     if (label) this._boardLabel = label;
     const local = (this.store.loadBoards()[this._boardId] || []).map((e) => ({ ...e }));
     const friends = new Set([this.store.data.profile.name, ...(this.store.data.rivals || []).map((r) => r.name)]);
-    const render = (entries, note) => {
-      const filtered = scope === 'friends' ? entries.filter((e) => friends.has(e.name)) : entries;
+    // preFiltered: the server already applied the friends scope (hosted board).
+    const render = (entries, note, preFiltered = false) => {
+      const filtered = scope === 'friends' && !preFiltered ? entries.filter((e) => friends.has(e.name)) : entries;
       this.ui.renderBoard(filtered.sort(compareBoardEntries), scope, note, this.store.data.profile.name);
     };
     $('board-h').textContent = 'Leaderboard';
     $('board-sub').textContent = this._boardLabel || `Board ${this._boardId}`;
     if (this.platform.hosted) {
-      this.platform.leaderboard(this._boardId, 'global')
+      // Platform board: read-only, nicknames resolved from user ids.
+      this.platform.leaderboardEntries({ friendsOnly: scope === 'friends' })
+        .then((entries) => {
+          if (entries) render(entries, 'Global board (read-only).', true);
+          else render(local, 'No platform board for this game — local records only.');
+        })
+        .catch(() => render(local, 'Offline — showing local (casual) board.'));
+    } else if (this.platform.devMode) {
+      this.platform.devLeaderboard(this._boardId, 'global')
         .then((res) => render(res.entries || local, 'Validated global board.'))
         .catch(() => render(local, 'Offline — showing local (casual) board.'));
     } else {
@@ -1414,7 +1428,7 @@ class App {
       onMode: (mode) => { this.audio.play('ui.open'); this.openMode(mode); },
       onSetupStart: () => this.startSetup(),
       onShowProfile: () => {
-        this.ui.renderProfile(this.store.data, ACHIEVEMENTS, this.platform.hosted);
+        this.ui.renderProfile(this.store.data, ACHIEVEMENTS, this.platform.hosted, this.platform.syncStatus);
         this.ui.showScreen('profile');
       },
       onShowSettings: (from) => {
@@ -1476,7 +1490,9 @@ class App {
       onRename: (name) => {
         if (name) this.store.update((d) => { d.profile.name = name; d.profile.guest = false; });
       },
-      onCloudSync: () => this.syncCloudSave().then(() => this.ui.toast('Cloud save synced.')),
+      onCloudSync: () => this.platform.flushCloudSave()
+        .then(() => this.syncCloudSave())
+        .then(() => this.ui.toast('Cloud save synced.')),
       onBoardScope: (scope) => this.showBoard(this._boardId, scope),
       onShowBoard: (which) => {
         const week = this.platform.isoWeekString();

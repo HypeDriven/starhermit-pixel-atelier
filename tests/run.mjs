@@ -434,6 +434,110 @@ section('storage: checksum, migration, corruption');
 }
 
 // ---------------------------------------------------------------------------
+section('platform: hosted launch flow (stubbed location/history/fetch)');
+{
+  const g = globalThis;
+  const savedGlobals = { location: g.location, history: g.history, fetch: g.fetch };
+  const restore = () => {
+    for (const k of Object.keys(savedGlobals)) {
+      if (savedGlobals[k] === undefined) delete g[k]; else g[k] = savedGlobals[k];
+    }
+  };
+  const b64url = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const mkJwt = (payload) => `h.${b64url(payload)}.s`;
+  const captured = [];
+  let replaced = null;
+  const routes = {
+    '/api/v1/users/user-12345678-abcd/profile': { id: 'user-12345678-abcd', username: 'ignore_me', nickname: 'NeonFox' },
+    '/api/v1/users/user-other/profile': { id: 'user-other', nickname: 'RivalOne' },
+    '/api/v1/games/pixel-atelier': { leaderboardId: 'lb-1' },
+    '/api/v1/leaderboards/lb-1/entries?friendsOnly=false&page=0&pageSize=50':
+      { entries: [{ userId: 'user-other', score: 777, progressPct: 100, errors: 0, elapsedMs: 61000 }] },
+    '/api/v1/leaderboard?board=chase-2026-W37&scope=global': { entries: [] },
+  };
+  const stubFetch = async (url, opts = {}) => {
+    const u = String(url);
+    captured.push({ url: u, opts });
+    if (u.endsWith('/api/v1/me/cloud-saves/pixel-atelier')) {
+      if ((opts.method || 'GET') === 'GET') return new Response('x', { status: 404 });
+      return new Response('{"ok":true}', { status: 200 });
+    }
+    const key = Object.keys(routes).find((k) => u.endsWith(k));
+    if (key) return new Response(JSON.stringify(routes[key]), { status: 200 });
+    return new Response('{"error":"not-found"}', { status: 404 });
+  };
+
+  try {
+    const { Platform, zipStore, unzipFirstEntry, base64ToBytes } = await import('../js/platform.js');
+
+    // Hosted boot: fragment token read once + stripped, claims decoded.
+    const jwt = mkJwt({ sub: 'user-12345678-abcd', game_scope: 'pixel-atelier' });
+    g.location = {
+      search: '', hash: `#game_token=${jwt}&session_id=xyz`,
+      pathname: '/index.html', hostname: 'pixel-atelier.starhermit.com',
+    };
+    g.history = { replaceState: (a, b, url) => { replaced = url; } };
+    g.fetch = stubFetch;
+    const p = new Platform();
+    eq(p.hosted, true, 'fragment token → hosted');
+    eq(p.userId, 'user-12345678-abcd', 'sub decoded');
+    eq(p.gameSlug, 'pixel-atelier', 'game_scope decoded (not hard-coded)');
+    eq(replaced, '/index.html#session_id=xyz', 'game_token stripped, session_id preserved');
+    await p.init();
+    eq(p.profile.name, 'NeonFox', 'nickname adopted (username never displayed)');
+    ok(captured.length > 0 && captured.every((c) => String(c.opts.headers?.Authorization || '').startsWith('Bearer h.')),
+      'Bearer on every call');
+
+    // Cloud save: one slot, {dataBase64} body, zip decodes to the doc.
+    const doc = { v: 1, rev: 3, updatedAt: 1, checksum: 'c', data: { stats: { cellsFilled: 7 } } };
+    await p.cloudSave(doc);
+    const put = captured.find((c) => c.opts.method === 'PUT');
+    ok(put && put.url.endsWith('/api/v1/me/cloud-saves/pixel-atelier'), 'cloud PUT targets the game slot');
+    const wireDoc = JSON.parse(new TextDecoder().decode(unzipFirstEntry(base64ToBytes(JSON.parse(put.opts.body).dataBase64))));
+    eq(JSON.stringify(wireDoc), JSON.stringify(doc), 'cloud PUT body is the zipped doc');
+    eq(await p.cloudLoad(), null, 'cloud load 404 → null');
+    // Strict-reader validity of the exact wire format.
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync('/tmp/pixel-platform-test.zip', Buffer.from(zipStore('save.json', new TextEncoder().encode(JSON.stringify(doc)))));
+    const { execFileSync } = await import('node:child_process');
+    const unzipOut = execFileSync('unzip', ['-t', '/tmp/pixel-platform-test.zip'], { encoding: 'utf8' });
+    ok(/No errors detected/.test(unzipOut), 'zipStore output passes unzip -t');
+
+    // Leaderboards: read-only, nicknames resolved from user ids.
+    const entries = await p.leaderboardEntries({ friendsOnly: false });
+    eq(entries.length, 1, 'entries returned');
+    eq(entries[0].name, 'RivalOne', 'entry resolves userId → nickname');
+    eq(entries[0].score, 777, 'entry score normalized');
+    let threw = false;
+    try { await p.submitScore('board', {}); } catch (e) { threw = e.code === 'unsupported'; }
+    ok(threw, 'client submit rejected on-platform');
+    eq(await p.unlockAchievement('first-completion'), null, 'achievements stay local on-platform');
+
+    // Local dev: query fallback accepted, devMode enables the dev-server routes.
+    g.location = {
+      search: `?token=${mkJwt({ sub: 'user-9', game_scope: 'pixel-atelier' })}`,
+      hash: '', pathname: '/', hostname: 'localhost',
+    };
+    const dev = new Platform();
+    eq(dev.hosted, true, 'query token fallback (local dev)');
+    eq(dev.devMode, true, 'localhost → dev mode');
+    await dev.devLeaderboard('chase-2026-W37');
+    ok(captured.some((c) => c.url.endsWith('/api/v1/leaderboard?board=chase-2026-W37&scope=global')), 'dev leaderboard read');
+
+    // Offline: no token → guest, daily derived locally, no requests.
+    captured.length = 0;
+    g.location = { search: '', hash: '', pathname: '/', hostname: 'pixel-atelier.starhermit.com' };
+    const guest = new Platform();
+    eq(guest.hosted, false, 'no token → guest mode');
+    const info = await guest.dailyInfo();
+    eq(info.seed, `daily:${info.date}`, 'daily derived locally when hosted');
+    eq(captured.length, 0, 'guest mode issues no requests');
+  } finally {
+    restore();
+  }
+}
+
+// ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) {
   console.log('Failures:', failures.join(' | '));

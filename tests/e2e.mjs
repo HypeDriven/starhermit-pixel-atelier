@@ -25,15 +25,14 @@
  * a move: every fill is a real click/tap on a real palette swatch and a
  * real pointer event on the canvas. No game code is modified.
  *
- * Serving: the repo ships `server.js` (the StarHermit authoritative script
- * declared by starhermit.txt), but the game is fully playable offline —
- * when `/api/v1/time` is unavailable, `Platform.init` sets `hosted=false`
- * and every screen works in guest mode (platform.js). So, like the sibling
- * static-SPA tests, this embeds a minimal node:http static server on an
- * ephemeral port and answers /api/* probes with 200 `{}`; the client
- * degrades to its documented offline path with zero console noise. If the
- * UI ever required the real backend this could be swapped for spawning
- * `server.js`; today it is not needed.
+ * Serving: the repo ships `server.js` (a local development/validation
+ * server), but the game is fully playable offline — with no launch token in
+ * the URL, `Platform` stays in local guest mode (`hosted=false`) and every
+ * screen works (platform.js). So, like the sibling static-SPA tests, this
+ * embeds a minimal node:http static server on an ephemeral port and answers
+ * /api/* probes with 200 `{}`; the client degrades to its documented offline
+ * path with zero console noise. If the UI ever required the real backend
+ * this could be swapped for spawning `server.js`; today it is not needed.
  *
  * Run: npm run test:e2e   (or: node tests/e2e.mjs)
  */

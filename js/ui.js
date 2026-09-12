@@ -347,11 +347,13 @@ export class UI {
   }
 
   // ------------------------------------------------------------- profile ---
-  renderProfile(save, achMeta, hosted) {
+  renderProfile(save, achMeta, hosted, syncStatus = 'offline') {
     $('profile-name').value = save.profile.name;
     $('profile-identity').textContent = hosted
       ? 'Signed in through the host shell. Progress syncs to the cloud.'
       : 'Guest profile — progress is stored on this device.';
+    this._syncHosted = hosted;
+    this.setSyncStatus(syncStatus);
     const s = save.stats;
     const dl = $('profile-stats');
     dl.textContent = '';
@@ -380,6 +382,20 @@ export class UI {
     }
     $('btn-cloud-sync').hidden = !hosted;
     this.renderRivals(save.rivals || []);
+  }
+
+  // Small cloud-sync indicator shown where the game surfaces its save state.
+  setSyncStatus(status) {
+    this._syncStatus = status;
+    const el = $('profile-sync');
+    if (!el) return;
+    el.textContent = this._syncHosted
+      ? ({
+        synced: 'Cloud save: synced.',
+        saving: 'Cloud save: saving…',
+        offline: 'Cloud save: offline — local copy kept.',
+      }[status] || '')
+      : '';
   }
 
   renderRivals(rivals) {
