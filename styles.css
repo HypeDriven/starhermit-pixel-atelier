@@ -411,3 +411,19 @@ body.reduced-motion * { transition: none !important; animation: none !important;
 
 /* RTL friendliness */
 [dir="rtl"] .hud-top { flex-direction: row-reverse; }
+
+/* Graphics settings (js/gfx-panel.js) */
+.gfx-panel { grid-column: 1 / -1; min-width: 0; }
+.gfx-panel .field { margin: 6px 0; }
+.gfx-panel .gfx-scale { grid-template-columns: minmax(76px, auto) 1fr 48px; }
+.gfx-cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 12px; }
+.gfx-cats select, .gfx-panel select { width: 100%; min-width: 0; }
+.gfx-panel .fine { overflow-wrap: anywhere; }
+.gfx-panel .warn { color: #ffb86b; }
+.fps-meter {
+  position: fixed; left: max(8px, env(safe-area-inset-left)); bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 60; pointer-events: none; padding: 3px 8px; border-radius: 6px;
+  background: rgba(5, 7, 15, 0.72); color: #9fd8ff; font: 600 12px/1.3 ui-monospace, monospace;
+}
+/* Title: let the drafting-table scene read through a lighter veil (the card stays opaque). */
+#screen-title { background: radial-gradient(ellipse at 50% 40%, rgba(10, 16, 36, 0.3), rgba(5, 7, 15, 0.78)); backdrop-filter: blur(1.5px); }

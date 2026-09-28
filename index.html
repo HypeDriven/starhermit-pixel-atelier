@@ -170,16 +170,10 @@
           <label class="check"><input type="checkbox" id="set-captions"> Captions for audio cues</label>
           <label class="check"><input type="checkbox" id="set-haptics"> Haptics (vibration)</label>
         </fieldset>
+        <!-- Graphics: quality preset, render scale, per-effect overrides (js/gfx-panel.js) -->
+        <fieldset id="gfx-panel" class="gfx-panel"><legend>Graphics</legend></fieldset>
         <fieldset>
-          <legend>Graphics</legend>
-          <label class="field">Quality tier
-            <select id="set-tier">
-              <option value="auto">Auto</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </label>
+          <legend>Display &amp; accessibility</legend>
           <label class="check"><input type="checkbox" id="set-motion"> Reduced motion</label>
           <label class="check"><input type="checkbox" id="set-contrast"> High contrast interface</label>
           <label class="check"><input type="checkbox" id="set-text"> Larger text</label>
@@ -324,6 +318,9 @@
   <div id="alerts" class="sr-only" aria-live="assertive"></div>
   <div id="captions" class="captions" aria-live="polite" hidden></div>
 </div>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

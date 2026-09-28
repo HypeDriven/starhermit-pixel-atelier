@@ -3,7 +3,17 @@
 // mutates rules state. Deterministic visual seed drives decoration only.
 
 import * as THREE from '../vendor/three.module.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RNG } from './rng.js';
+import { resolve, describe, SHADOW_MAP, PARTICLE_CAP } from './gfx.js';
 
 const CELL = 1;                 // world units per cell
 const H_EMPTY = 0.12;           // extrusion heights
@@ -13,6 +23,53 @@ const FOV = 32;                 // low-distortion perspective
 const LAYER_ENV = 0, LAYER_GAME = 1, LAYER_SELECT = 2, LAYER_FX = 3;
 
 function hexToThree(hex) { return new THREE.Color(hex); }
+
+// Colour grade + vignette (display-space in, display-space out): gentle
+// S-curve, a touch more saturation, cool shadows / warm highlights. Blacks are
+// lifted slightly so empty cells never sink into the table.
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uAmount: { value: 1.0 }, uVignette: { value: 0.26 } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uAmount; uniform float uVignette;
+    varying vec2 vUv;
+    void main() {
+      vec4 src = texture2D(tDiffuse, vUv);
+      vec3 c = clamp(src.rgb, 0.0, 1.0);
+      vec3 s = mix(c, c * c * (3.0 - 2.0 * c), 0.22);
+      float l = dot(s, vec3(0.299, 0.587, 0.114));
+      s = mix(vec3(l), s, 1.12);
+      s *= mix(vec3(0.95, 0.98, 1.06), vec3(1.04, 1.0, 0.97), smoothstep(0.2, 0.8, l));
+      s = s * 0.975 + 0.018;
+      c = mix(c, s, uAmount);
+      float d = length((vUv - 0.5) * vec2(1.1, 1.0));
+      c *= 1.0 - uVignette * smoothstep(0.38, 0.9, d);
+      gl_FragColor = vec4(c, src.a);
+    }`,
+};
+
+// Cell material patch: per-instance glow (fill pulse / filled sheen) added as
+// emissive, and — at detailed quality — a bevel highlight on each block's top
+// edge plus a base-to-top gradient on its sides (cheap fake contact shading).
+function patchCellMaterial(mat, uniforms) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uDetail = uniforms.uDetail;
+    sh.uniforms.uGlowGain = uniforms.uGlowGain;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;\nvarying vec2 vCellUv;\nvarying vec3 vObjN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vCellUv = uv; vObjN = normal;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uDetail;\nuniform float uGlowGain;\nvarying float vGlow;\nvarying vec2 vCellUv;\nvarying vec3 vObjN;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float cellTop = step(0.5, vObjN.y);
+        vec2 cellE = min(vCellUv, 1.0 - vCellUv);
+        float cellEdge = 1.0 - smoothstep(0.0, 0.1, min(cellE.x, cellE.y));
+        if (uDetail > 0.5) diffuseColor.rgb *= mix(mix(0.55, 1.0, vCellUv.y), 1.0 + 0.4 * cellEdge, cellTop);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance += vColor * vGlow * uGlowGain * mix(0.6, 1.0, cellTop);`);
+  };
+  mat.customProgramCacheKey = () => 'pa-cell-v1';
+}
 
 // Critically damped spring (authored, interruptible — target may change freely).
 function springStep(current, target, velocity, smoothTime, dt) {
@@ -41,8 +98,7 @@ class DraftingTableRenderer {
     this.theme = null;
     this.reducedMotion = false;
     this.cellLabels = false;
-    this.tier = 'high';
-    this.renderScale = 1;
+    this.tier = 'balanced';
     this.content = null;
     this.palette = [];
     this.cells = [];          // per-cell visual state
@@ -54,29 +110,48 @@ class DraftingTableRenderer {
     this.hidden = false;
     this.disposed = false;
     this._contextLost = false;
-    this.cameraMode = { tx: 0, tz: 0, dist: 10, vx: 0, vz: 0, vd: 0, x: 0, z: 0, d: 10 };
+    // Title framing (no board yet): look across the table toward the holo ring and floating pixels.
+    this.cameraMode = { tx: 0, tz: -6, dist: 36, vx: 0, vz: 0, vd: 0, x: 0, z: -6, d: 36 };
     this._tmpM = new THREE.Matrix4();
     this._tmpC = new THREE.Color();
     this._tmpV = new THREE.Vector3();
     this._revealT = Infinity;
     this._shakeAmp = 0;
+    // Graphics quality (gfx.js): resolved tiers, adaptive resolution, post chain.
+    this.gpu = opts.gpu || '';
+    this.detected = opts.detected || 'balanced';
+    this.saved = {};
+    this.q = resolve({}, this.detected);
+    this.adaptiveScale = 1;
+    this._frames = [];
+    this.fps = 0;
+    this.pixelRatio = 1;
+    this.size = [0, 0];
+    this.postKey = null;
+    this.composer = null;
+    this.postFailed = false;
+    this.cellUniforms = { uDetail: { value: 0 }, uGlowGain: { value: 1 } };
     this._initGL();
   }
 
   // ------------------------------------------------------------------ GL ---
   _initGL() {
+    // Native MSAA is a context attribute: it follows the anti-aliasing setting
+    // chosen at load (msaa, or off); runtime changes use the post chain.
     const renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: this.tier === 'high',
+      antialias: this.opts.antialias !== false,
       powerPreference: 'high-performance',
       stencil: false,
     });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.12;
-    renderer.shadowMap.enabled = this.tier === 'high';
+    renderer.shadowMap.enabled = false;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer = renderer;
+    this.envRT = null;
+    this.postKey = null;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 300);
@@ -106,9 +181,14 @@ class DraftingTableRenderer {
 
     this._buildEnvironment();
     this.resize();
+    this._applyGraphics();
   }
 
   _disposeScene() {
+    this.composer?.dispose();
+    this.composer = null;
+    this.envRT?.dispose();
+    this.envRT = null;
     this.scene?.traverse((obj) => {
       obj.geometry?.dispose?.();
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -133,29 +213,22 @@ class DraftingTableRenderer {
     s.add(this.hemi);
     this.key = new THREE.DirectionalLight(hexToThree(t.key || '#9fd8ff'), 1.6);
     this.key.position.set(8, 16, 6);
-    if (this.tier === 'high') {
-      this.key.castShadow = true;
-      this.key.shadow.mapSize.set(1024, 1024);
-      this.key.shadow.bias = -0.0004;
-      const ext = 16;
-      Object.assign(this.key.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, far: 60 });
-    }
-    s.add(this.key);
+    this.key.shadow.bias = -0.0004;
+    this.key.shadow.normalBias = 0.02;
+    s.add(this.key, this.key.target);
+    this._fitShadow();
     this.rim = new THREE.PointLight(hexToThree(t.rim || '#ff7ad9'), 60, 60, 2);
     this.rim.position.set(-10, 6, -8);
     s.add(this.rim);
 
     // Drafting table slab with procedural grid texture.
     const tableSize = 64;
-    const gridTex = makeGridTexture(t.table || '#0d1426', t.grid || '#16233f');
-    gridTex.wrapS = gridTex.wrapT = THREE.RepeatWrapping;
-    gridTex.repeat.set(tableSize / 4, tableSize / 4);
-    const tableMat = new THREE.MeshStandardMaterial({ map: gridTex, roughness: 0.85, metalness: 0.15 });
+    const tableMat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0.15, envMapIntensity: 0.6 });
     this.table = new THREE.Mesh(new THREE.BoxGeometry(tableSize, 1.2, tableSize), tableMat);
     this.table.position.y = -0.62;
-    this.table.receiveShadow = this.tier === 'high';
     this.table.layers.set(LAYER_ENV);
     s.add(this.table);
+    this._applyTableSurface();
 
     // Neon edge strips around the table (merged into one mesh).
     this.edgeMat = new THREE.MeshBasicMaterial({ color: hexToThree(t.accentA || '#22d3ee') });
@@ -170,29 +243,91 @@ class DraftingTableRenderer {
     this.tableEdges.layers.set(LAYER_ENV);
     s.add(this.tableEdges);
 
-    // Decorative props (quality-gated): corner pylons + a holo ring + dust.
+    // Decorative props (quality-gated): corner pylons, holo ring, floating
+    // pixels and dust.
     this.props = new THREE.Group();
     this.props.layers.set(LAYER_ENV);
     s.add(this.props);
     this._buildProps();
   }
 
+  // Key-light shadow box fitted tightly to the board (or a default play area).
+  _fitShadow() {
+    if (!this.key) return;
+    const ext = Math.max(this.w || 12, this.h || 12) * CELL * 0.5 + 1.5;
+    const sc = this.key.shadow.camera;
+    Object.assign(sc, { left: -ext * 1.25, right: ext * 1.25, top: ext * 1.25, bottom: -ext * 1.25, near: 1, far: 50 });
+    sc.updateProjectionMatrix();
+    this.key.position.set(8, 16, 6).normalize().multiplyScalar(24);
+    this.key.target.position.set(0, 0, 0);
+  }
+
+  _applyTableSurface() {
+    if (!this.table) return;
+    const t = this.theme || {};
+    const detailed = this.q.detail === 'detailed';
+    const m = this.table.material;
+    m.map?.dispose();
+    m.roughnessMap?.dispose();
+    m.map = detailed ? makeGridTextureDetailed(t.table || '#0d1426', t.grid || '#16233f') : makeGridTexture(t.table || '#0d1426', t.grid || '#16233f');
+    m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping;
+    m.map.repeat.set(16, 16);
+    m.roughnessMap = detailed ? makeNoiseTexture() : null;
+    if (m.roughnessMap) {
+      m.roughnessMap.wrapS = m.roughnessMap.wrapT = THREE.RepeatWrapping;
+      m.roughnessMap.repeat.set(6, 6);
+      m.roughness = 1;
+      m.metalness = 0.25;
+    } else {
+      m.roughness = 0.85;
+      m.metalness = 0.15;
+    }
+    m.needsUpdate = true;
+  }
+
   _buildProps() {
     while (this.props.children.length) {
       const c = this.props.children.pop();
       c.geometry?.dispose?.();
-      this.props.remove(c);
+      c.material?.dispose?.();
     }
-    if (this.tier === 'low') { this.dust = null; return; }
+    this.dust = null;
+    this.holoRing = null;
+    this.floaters = null;
+    this.tips = null;
+    const q = this.q;
     const t = this.theme || {};
     const rng = new RNG('decor:' + (this.content?.seed || 'default'));
+    const glow = q.bloom === 'on' ? 2.2 : 1;
     const accent = hexToThree(t.accentB || '#f472b6');
-    const pylonMat = new THREE.MeshStandardMaterial({ color: hexToThree(t.tableEdge || '#1c2b4d'), roughness: 0.6, metalness: 0.4 });
-    const tipMat = new THREE.MeshBasicMaterial({ color: accent });
+    const accentA = hexToThree(t.accentA || '#22d3ee');
+
+    // Dust motes (cheap points; cosmetic only, never raycastable).
+    if (q.particles === 'high') {
+      const count = 160;
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        pos[i * 3] = rng.range(-22, 22);
+        pos[i * 3 + 1] = rng.range(0.5, 10);
+        pos[i * 3 + 2] = rng.range(-22, 22);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.dust = new THREE.Points(g, new THREE.PointsMaterial({
+        color: accentA, size: 0.07, transparent: true, opacity: 0.55,
+        sizeAttenuation: true, depthWrite: false,
+      }));
+      this.dust.layers.set(LAYER_ENV);
+      this.dust.raycast = () => {};
+      this.props.add(this.dust);
+    }
+    if (q.detail !== 'detailed') return;
+
+    const pylonMat = new THREE.MeshStandardMaterial({ color: hexToThree(t.tableEdge || '#1c2b4d'), roughness: 0.45, metalness: 0.6 });
+    const tipMat = new THREE.MeshBasicMaterial({ color: accent.clone().multiplyScalar(glow) });
     const geoms = [], tipGeoms = [];
-    const n = this.tier === 'high' ? 4 : 2;
-    for (let i = 0; i < n; i++) {
-      const ang = (i / n) * Math.PI * 2 + 0.4;
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2 + 0.4;
       const r = 24 + rng.range(-2, 2);
       const x = Math.cos(ang) * r, z = Math.sin(ang) * r;
       const h = 4 + rng.range(0, 3);
@@ -204,39 +339,62 @@ class DraftingTableRenderer {
       tipGeoms.push(tip);
     }
     const pylons = new THREE.Mesh(mergeGeoms(geoms), pylonMat);
-    const tips = new THREE.Mesh(mergeGeoms(tipGeoms), tipMat);
-    this.props.add(pylons, tips);
+    pylons.castShadow = false;
+    this.tips = new THREE.Mesh(mergeGeoms(tipGeoms), tipMat);
+    this.tipBase = accent.clone().multiplyScalar(glow);
+    this.props.add(pylons, this.tips);
 
     // Holo ring floating behind the board.
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(9, 0.05, 8, 64),
-      new THREE.MeshBasicMaterial({ color: hexToThree(t.accentA || '#22d3ee'), transparent: true, opacity: 0.35 })
+      new THREE.TorusGeometry(9, 0.05, 8, 96),
+      new THREE.MeshBasicMaterial({ color: accentA.clone().multiplyScalar(glow), transparent: true, opacity: 0.4, depthWrite: false })
     );
-    ring.position.set(0, 7, -16);
+    const ext = Math.max(this.w || 12, this.h || 12) * CELL * 0.5;
+    ring.position.set(0, 6, -Math.max(16, ext + 10));
     ring.rotation.x = Math.PI / 2.4;
     this.props.add(ring);
     this.holoRing = ring;
 
-    // Dust motes (cheap points; cosmetic only, never raycastable).
-    if (this.tier === 'high') {
-      const count = 120;
-      const pos = new Float32Array(count * 3);
-      for (let i = 0; i < count; i++) {
-        pos[i * 3] = rng.range(-20, 20);
-        pos[i * 3 + 1] = rng.range(0.5, 10);
-        pos[i * 3 + 2] = rng.range(-20, 20);
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      this.dust = new THREE.Points(g, new THREE.PointsMaterial({
-        color: hexToThree(t.accentA || '#22d3ee'), size: 0.06, transparent: true, opacity: 0.5,
-        sizeAttenuation: true,
-      }));
-      this.dust.layers.set(LAYER_ENV);
-      this.props.add(this.dust);
-    } else {
-      this.dust = null;
+    // Floating pixels: small neon cubes drifting around the table's rim —
+    // the "extruded pixels" motif, kept well outside the playfield.
+    const n = 44;
+    const cols = [t.accentA || '#22d3ee', t.accentB || '#f472b6', '#ffd166', '#3fd68f'];
+    const fm = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.34, 0.34, 0.34),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(glow > 1 ? 1.25 : 0.9) }),
+      n
+    );
+    this.floatData = [];
+    const c = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      // Back arc only (behind and beside the board), never between camera and table.
+      const ang = rng.range(Math.PI * 1.05, Math.PI * 1.95);
+      const r = rng.range(ext + 5, ext + 20);
+      const d = { x: Math.cos(ang) * r * 1.3, z: Math.sin(ang) * r, y: rng.range(1, 5), ph: rng.range(0, 6.28), sp: rng.range(0.4, 1), s: rng.range(0.6, 1.4) };
+      this.floatData.push(d);
+      fm.setColorAt(i, c.set(cols[i % cols.length]));
     }
+    fm.instanceColor.needsUpdate = true;
+    fm.layers.set(LAYER_ENV);
+    fm.raycast = () => {};
+    this.floaters = fm;
+    this._placeFloaters(0);
+    this.props.add(fm);
+  }
+
+  _placeFloaters(time) {
+    if (!this.floaters) return;
+    const m = this._tmpM, q = new THREE.Quaternion(), e = new THREE.Euler(), v = this._tmpV, sc = new THREE.Vector3();
+    for (let i = 0; i < this.floatData.length; i++) {
+      const d = this.floatData[i];
+      e.set(time * d.sp * 0.5 + d.ph, time * d.sp * 0.7 + d.ph, 0);
+      q.setFromEuler(e);
+      v.set(d.x, d.y + Math.sin(time * d.sp + d.ph) * 0.35, d.z);
+      sc.setScalar(d.s);
+      m.compose(v, q, sc);
+      this.floaters.setMatrixAt(i, m);
+    }
+    this.floaters.instanceMatrix.needsUpdate = true;
   }
 
   // ------------------------------------------------------------ theme ------
@@ -249,14 +407,20 @@ class DraftingTableRenderer {
     this.hemi.groundColor = hexToThree(theme.bg);
     this.key.color = hexToThree(theme.key);
     this.rim.color = hexToThree(theme.rim);
-    this.edgeMat.color = hexToThree(theme.accentA);
-    this.table.material.map?.dispose();
-    this.table.material.map = makeGridTexture(theme.table, theme.grid);
-    this.table.material.map.wrapS = this.table.material.map.wrapT = THREE.RepeatWrapping;
-    this.table.material.map.repeat.set(16, 16);
-    this.table.material.needsUpdate = true;
+    this._applyTableSurface();
     this._buildProps();
     this._recolorAll();
+    this._applyGlow();
+  }
+
+  // Neon strips and the board frame read brighter than 1.0 when bloom is on,
+  // so only they (and fill pulses) bloom; without bloom they stay flat.
+  _applyGlow() {
+    const glow = this.q.bloom === 'on' ? 2.2 : 1;
+    const a = hexToThree(this.theme?.accentA || '#22d3ee');
+    this.edgeMat?.color.copy(a).multiplyScalar(glow);
+    this.frame?.material.color.copy(a).multiplyScalar(glow);
+    this.cellUniforms.uGlowGain.value = this.q.bloom === 'on' ? 1.6 : 0.8;
   }
 
   _recolorAll() {
@@ -267,27 +431,163 @@ class DraftingTableRenderer {
       this.cellMesh.setColorAt(i, this._cellBaseColor(i, c));
     }
     this.cellMesh.instanceColor.needsUpdate = true;
-    if (this.frame) this.frame.material.color = hexToThree(this.theme?.accentA || '#22d3ee');
+    this._applyGlow();
   }
 
+  // ------------------------------------------------------ graphics ------
+  /** Apply saved graphics settings (gfx.js shape). Live: no reload needed. */
+  setGraphics(saved) {
+    this.saved = { ...(saved || {}) };
+    this.q = resolve(this.saved, this.detected);
+    this.adaptiveScale = 1;
+    this._frames = [];
+    this._applyGraphics();
+    return this.q;
+  }
+
+  // Legacy tier API (low / medium / high) maps onto presets.
   setQuality(tier) {
-    if (this.tier === tier) return;
-    this.tier = tier;
-    this.renderer.shadowMap.enabled = tier === 'high';
-    this.key.castShadow = tier === 'high';
-    this.table.receiveShadow = tier === 'high';
-    const dprCap = tier === 'high' ? 2 : tier === 'medium' ? 1.5 : 1;
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, dprCap) * this.renderScale);
+    this.setGraphics({ ...this.saved, preset: tier === 'medium' ? 'balanced' : tier });
+  }
+  setRenderScale() { /* superseded by render_scale + adaptive resolution */ }
+
+  _applyGraphics() {
+    const g = this.q;
+    if (!this.renderer || !this.scene) return;
+    this.tier = g.preset;
+    // Shadows: key light + board cells + table, map size from the tier.
+    const size = SHADOW_MAP[g.shadows];
+    this.renderer.shadowMap.enabled = size > 0;
+    this.key.castShadow = size > 0;
+    if (size > 0 && this.key.shadow.mapSize.x !== size) {
+      this.key.shadow.mapSize.set(size, size);
+      this.key.shadow.map?.dispose();
+      this.key.shadow.map = null;
+    }
+    this.table.receiveShadow = size > 0;
+    if (this.cellMesh) this.cellMesh.castShadow = this.cellMesh.receiveShadow = size > 0;
+    // Reflections: studio environment (PMREM) + clearcoat cells.
+    if (g.reflections === 'on') {
+      if (!this.envRT) {
+        const pm = new THREE.PMREMGenerator(this.renderer);
+        const room = new RoomEnvironment();
+        this.envRT = pm.fromScene(room, 0.04);
+        room.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+        pm.dispose();
+      }
+      this.scene.environment = this.envRT.texture;
+      this.scene.environmentIntensity = 0.22;
+    } else {
+      this.scene.environment = null;
+    }
+    this.cellUniforms.uDetail.value = g.detail === 'detailed' ? 1 : 0;
+    if (this.cellMesh) this.cellMesh.material = g.reflections === 'on' ? this.cellMatGloss : this.cellMat;
+    this._applyTableSurface();
     this._buildProps();
     this._buildParticles();
-    this.renderer.compile(this.scene, this.camera); // prewarm outside active play
+    this._applyGlow();
+    // Materials pick up shadow / environment changes on recompile.
+    this.scene.traverse((o) => {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) if (m) m.needsUpdate = true;
+    });
+    this.postKey = null; // rebuild the post chain on the next frame
+    this._fpsVisible(g.showFps);
+    document.body.dataset.gfxPreset = g.preset;
+    this.canvas.dataset.gfxPreset = g.preset;
+    this.resize();
   }
 
-  setRenderScale(scale) {
-    this.renderScale = scale;
-    const dprCap = this.tier === 'high' ? 2 : this.tier === 'medium' ? 1.5 : 1;
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, dprCap) * scale);
-    this.resize();
+  /** What the settings panel shows: GPU, auto choice, resolved tiers, cost, fps. */
+  graphicsInfo() {
+    const px = [Math.round(this.size[0] * this.pixelRatio), Math.round(this.size[1] * this.pixelRatio)];
+    return {
+      gpu: this.gpu || 'unknown GPU',
+      detected: this.detected,
+      resolved: this.q,
+      pixels: px,
+      summary: describe(this.q, px),
+      fps: Math.round(this.fps || 0),
+      adaptiveScale: Math.round(this.adaptiveScale * 100) / 100,
+      postFailed: !!this.postFailed,
+    };
+  }
+
+  _fpsVisible(on) {
+    let el = document.getElementById('fps-meter');
+    if (on && !el) {
+      el = document.createElement('div');
+      el.id = 'fps-meter';
+      el.className = 'fps-meter';
+      el.setAttribute('aria-hidden', 'true');
+      el.textContent = '— fps';
+      document.body.append(el);
+    }
+    if (el) el.hidden = !on;
+  }
+
+  _postKey(w, h) {
+    const g = this.q;
+    return g.post && !this.postFailed ? [g.ao, g.bloom, g.grade, g.antialias, w, h, this.pixelRatio].join('|') : 'none';
+  }
+
+  _buildPost(w, h) {
+    const g = this.q;
+    this.composer?.dispose();
+    this.composer = null;
+    if (!g.post || this.postFailed) return;
+    const pw = Math.max(1, Math.round(w * this.pixelRatio)), ph = Math.max(1, Math.round(h * this.pixelRatio));
+    try {
+      const target = new THREE.WebGLRenderTarget(pw, ph, {
+        type: THREE.HalfFloatType, samples: g.antialias === 'msaa' ? 4 : 0,
+      });
+      const composer = new EffectComposer(this.renderer, target);
+      composer.setPixelRatio(this.pixelRatio);
+      composer.setSize(w, h);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      if (g.ao !== 'off') {
+        // Contact darkening where raised pixels meet the table and each other.
+        const ao = new GTAOPass(this.scene, this.camera, pw, ph);
+        ao.output = GTAOPass.OUTPUT.Default;
+        ao.blendIntensity = 0.75;
+        ao.updateGtaoMaterial({ radius: 0.5, distanceExponent: 1.2, thickness: 1.0, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
+        ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: g.ao === 'high' ? 6 : 4, rings: 2, samples: g.ao === 'high' ? 16 : 8 });
+        composer.addPass(ao);
+      }
+      if (g.bloom === 'on') {
+        // High threshold: only the neon strips, pylons and fill pulses bloom.
+        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.5, 0.9));
+      }
+      composer.addPass(new OutputPass());
+      if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
+      if (g.antialias === 'smaa') composer.addPass(new SMAAPass(pw, ph));
+      if (g.antialias === 'fxaa') {
+        const fxaa = new ShaderPass(FXAAShader);
+        fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+        composer.addPass(fxaa);
+      }
+      this.composer = composer;
+    } catch {
+      // Post-processing is an enhancement: render directly if it cannot be built.
+      this.postFailed = true;
+      this.composer = null;
+    }
+  }
+
+  // Adaptive resolution: average ~90 frames; step the scale down when slow,
+  // back up when fast. Also feeds the optional frame-rate readout.
+  _adapt(dtMs) {
+    const f = this._frames;
+    f.push(dtMs);
+    if (f.length < 90) return;
+    const avg = f.reduce((a, b) => a + b, 0) / f.length;
+    f.length = 0;
+    this.fps = 1000 / avg;
+    const el = document.getElementById('fps-meter');
+    if (el && !el.hidden) el.textContent = `${Math.round(this.fps)} fps · ${Math.round(this.pixelRatio * 100) / 100}×`;
+    if (!this.q.adaptive) { this.adaptiveScale = 1; return; }
+    if (avg > 26) this.adaptiveScale = Math.max(0.6, this.adaptiveScale - 0.1);
+    else if (avg < 14 && this.adaptiveScale < 1) this.adaptiveScale = Math.min(1, this.adaptiveScale + 0.05);
   }
 
   setReducedMotion(v) { this.reducedMotion = v; }
@@ -302,6 +602,8 @@ class DraftingTableRenderer {
     if (this.boardGroup) {
       this.scene.remove(this.boardGroup);
       this.boardGroup.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      this.cellMat?.dispose();
+      this.cellMatGloss?.dispose();
     }
     this.content = content;
     this.palette = palette;
@@ -323,11 +625,23 @@ class DraftingTableRenderer {
     // Cells: one instanced extruded box, origin at base so scale-y rises up.
     const geo = new THREE.BoxGeometry(0.92, 1, 0.92);
     geo.translate(0, 0.5, 0);
+    // Per-instance glow (fill pulse / filled sheen), read by the patched material.
+    this.glow = new Float32Array(w * h);
+    this.glowAttr = new THREE.InstancedBufferAttribute(this.glow, 1);
+    this.glowAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aGlow', this.glowAttr);
     this.cellMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.2 });
-    this.cellMesh = new THREE.InstancedMesh(geo, this.cellMat, w * h);
+    // Glossy lacquered pixels when reflections are on.
+    this.cellMatGloss = new THREE.MeshPhysicalMaterial({
+      roughness: 0.38, metalness: 0.08, clearcoat: 0.8, clearcoatRoughness: 0.22, envMapIntensity: 1.0,
+    });
+    patchCellMaterial(this.cellMat, this.cellUniforms);
+    patchCellMaterial(this.cellMatGloss, this.cellUniforms);
+    const shadows = SHADOW_MAP[this.q.shadows] > 0;
+    this.cellMesh = new THREE.InstancedMesh(geo, this.q.reflections === 'on' ? this.cellMatGloss : this.cellMat, w * h);
     this.cellMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.cellMesh.castShadow = this.tier === 'high';
-    this.cellMesh.receiveShadow = this.tier === 'high';
+    this.cellMesh.castShadow = shadows;
+    this.cellMesh.receiveShadow = shadows;
     this.cellMesh.layers.set(LAYER_GAME);
     group.add(this.cellMesh);
     const c = new THREE.Color();
@@ -406,6 +720,9 @@ class DraftingTableRenderer {
     this.frame = new THREE.Mesh(mergeGeoms(fg), frameMat);
     this.frame.layers.set(LAYER_GAME);
     group.add(this.frame);
+    this._applyGlow();
+    this._fitShadow();
+    this._buildProps(); // decor keeps clear of this board's footprint
 
     this._buildParticles();
     this._revealT = this.reducedMotion ? Infinity : 0; // board drop-in reveal
@@ -470,7 +787,7 @@ class DraftingTableRenderer {
       this.points.material.dispose();
       this.points = null;
     }
-    const cap = this.tier === 'high' ? 600 : this.tier === 'medium' ? 240 : 96;
+    const cap = PARTICLE_CAP[this.q.particles] || 96;
     this.pCap = cap;
     this.pData = new Float32Array(cap * 8); // x,y,z, vx,vy,vz, life, maxLife
     this.pAlive = 0;
@@ -804,8 +1121,13 @@ class DraftingTableRenderer {
   resize() {
     const w = this.canvas.clientWidth || 1;
     const h = this.canvas.clientHeight || 1;
+    // Pixel ratio = min(dpr, preset cap) × render scale × adaptive scale.
+    const ratio = Math.min(window.devicePixelRatio || 1, this.q.dpr) * this.q.scale * this.adaptiveScale;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.size = [w, h];
+    this.pixelRatio = ratio;
+    this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
   }
 
@@ -836,8 +1158,8 @@ class DraftingTableRenderer {
       this.cellMesh.instanceMatrix.needsUpdate = true;
       if (done || t > 4) this._revealT = Infinity;
     } else {
-      // Spring cells toward targets; pulse flashes.
-      let dirty = false;
+      // Spring cells toward targets; pulse flashes (fed to the glow attribute).
+      let dirty = false, glowDirty = false;
       for (let i = 0; i < this.cells.length; i++) {
         const cell = this.cells[i];
         if (cell.delay > 0) { cell.delay -= dt; dirty = true; continue; }
@@ -848,10 +1170,13 @@ class DraftingTableRenderer {
         }
         if (cell.flash > 0) {
           cell.flash = Math.max(0, cell.flash - dt * 3);
-          dirty = true;
+          dirty = glowDirty = true;
         }
+        const gl = cell.flash * 0.9;
+        if (this.glow[i] !== gl) { this.glow[i] = gl; glowDirty = true; }
       }
       if (dirty) this.cellMesh.instanceMatrix.needsUpdate = true;
+      if (glowDirty) this.glowAttr.needsUpdate = true;
     }
 
     // Marker pulse.
@@ -887,9 +1212,17 @@ class DraftingTableRenderer {
       this.points.geometry.setDrawRange(0, this.pAlive);
     }
 
-    // Dust drift (decorative, pauses when hidden above).
-    if (this.dust) this.dust.rotation.y += dt * 0.01;
-    if (this.holoRing) this.holoRing.rotation.z += dt * 0.05;
+    // Ambient motion (background: animated; off under reduced motion).
+    const ambient = this.q.background === 'animated' && !this.reducedMotion;
+    if (ambient) {
+      this._ambT = (this._ambT || 0) + dt;
+      const at = this._ambT;
+      if (this.dust) { this.dust.rotation.y += dt * 0.012; this.dust.position.y = Math.sin(at * 0.4) * 0.3; }
+      if (this.holoRing) this.holoRing.rotation.z += dt * 0.05;
+      this._placeFloaters(at);
+      if (this.tips && this.tipBase) this.tips.material.color.copy(this.tipBase).multiplyScalar(0.8 + 0.2 * Math.sin(at * 1.7));
+      this.rim.intensity = 60 * (0.9 + 0.1 * Math.sin(at * 0.9));
+    }
 
     // Camera spring (critically damped, interruptible).
     const cm = this.cameraMode;
@@ -916,7 +1249,23 @@ class DraftingTableRenderer {
     this.camera.lookAt(cm.x, 0, cm.z);
     this._refreshLabelVisibility();
 
-    this.renderer.render(this.scene, this.camera);
+    this._adapt(dtMs);
+    const w = this.canvas.clientWidth || 1, h = this.canvas.clientHeight || 1;
+    const ratio = Math.min(window.devicePixelRatio || 1, this.q.dpr) * this.q.scale * this.adaptiveScale;
+    if (w !== this.size[0] || h !== this.size[1] || ratio !== this.pixelRatio) this.resize();
+    const key = this._postKey(w, h);
+    if (key !== this.postKey) {
+      this.postKey = key;
+      this._buildPost(w, h);
+    }
+    this.renderer.info.autoReset = false; // count every pass of the frame
+    this.renderer.info.reset();
+    if (this.composer) {
+      try { this.composer.render(dt); }
+      catch { this.postFailed = true; this.composer?.dispose(); this.composer = null; this.postKey = null; this.renderer.render(this.scene, this.camera); }
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   getStats() {
@@ -954,6 +1303,77 @@ function makeGridTexture(baseHex, lineHex) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+// Detailed drafting surface: finer ruled grid, brighter major lines with a soft
+// glow, and faint deterministic speckle so the table is never a flat plane.
+function makeGridTextureDetailed(baseHex, lineHex) {
+  const size = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = baseHex;
+  ctx.fillRect(0, 0, size, size);
+  const rng = new RNG('table-speckle');
+  for (let i = 0; i < 900; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${rng.range(0.01, 0.04).toFixed(3)})`;
+    ctx.fillRect(rng.range(0, size), rng.range(0, size), 1, 1);
+  }
+  ctx.strokeStyle = lineHex;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let k = 1; k < 8; k++) {
+    if (k === 4) continue;
+    const p = (k * size) / 8 + 0.5;
+    ctx.moveTo(p, 0); ctx.lineTo(p, size);
+    ctx.moveTo(0, p); ctx.lineTo(size, p);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 0.8;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(size / 2, 0); ctx.lineTo(size / 2, size);
+  ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.shadowColor = lineHex;
+  ctx.shadowBlur = 6;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, size - 3, size - 3);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Roughness variation (linear data): soft value noise so reflections on the
+// table break up into a satin sheen instead of a mirror.
+function makeNoiseTexture() {
+  const size = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const rng = new RNG('table-rough');
+  const g = 16, grid = [];
+  for (let i = 0; i < g * g; i++) grid.push(rng.range(0, 1));
+  const at = (x, y) => grid[((y % g + g) % g) * g + ((x % g + g) % g)];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const fx = (x / size) * g, fy = (y / size) * g;
+      const x0 = Math.floor(fx), y0 = Math.floor(fy);
+      const tx = fx - x0, ty = fy - y0;
+      const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      const v = (at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx) * (1 - sy) + (at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx) * sy;
+      const r = Math.round(255 * (0.55 + 0.4 * v));
+      const k = (y * size + x) * 4;
+      img.data[k] = img.data[k + 1] = img.data[k + 2] = r;
+      img.data[k + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(cv);
 }
 
 function makeXTexture() {

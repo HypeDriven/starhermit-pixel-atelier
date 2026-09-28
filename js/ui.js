@@ -85,7 +85,6 @@ export class UI {
     S('set-muted').addEventListener('change', () => handlers.onSetting?.('audio.muted', S('set-muted').checked));
     S('set-captions').addEventListener('change', () => handlers.onSetting?.('a11y.captions', S('set-captions').checked));
     S('set-haptics').addEventListener('change', () => handlers.onSetting?.('a11y.haptics', S('set-haptics').checked));
-    S('set-tier').addEventListener('change', () => handlers.onSetting?.('graphics.tier', S('set-tier').value));
     S('set-motion').addEventListener('change', () => handlers.onSetting?.('a11y.reducedMotion', S('set-motion').checked));
     S('set-contrast').addEventListener('change', () => handlers.onSetting?.('a11y.highContrast', S('set-contrast').checked));
     S('set-text').addEventListener('change', () => handlers.onSetting?.('a11y.largerText', S('set-text').checked));
@@ -453,7 +452,6 @@ export class UI {
     S('set-muted').checked = settings.audio.muted;
     S('set-captions').checked = settings.a11y.captions;
     S('set-haptics').checked = settings.a11y.haptics;
-    S('set-tier').value = settings.graphics.tier;
     S('set-motion').checked = settings.a11y.reducedMotion;
     S('set-contrast').checked = settings.a11y.highContrast;
     S('set-text').checked = settings.a11y.largerText;

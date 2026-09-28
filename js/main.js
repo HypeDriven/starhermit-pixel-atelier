@@ -14,6 +14,8 @@ import { SaveStore } from './storage.js';
 import { Platform } from './platform.js';
 import { AudioEngine } from './audio.js';
 import { UI, $, fmtTime } from './ui.js';
+import { resolve as resolveGraphics, detectPreset, withPreset, PRESETS } from './gfx.js';
+import { mountGraphicsPanel } from './gfx-panel.js';
 
 // ---------------------------------------------------------------------------
 // Achievements — static set, stable lowercase keys, idempotent unlocks.
@@ -84,6 +86,9 @@ class App {
     this.ui.setBoot(0.1, 'Checking capabilities…');
     const force2d = typeof location !== 'undefined' && new URLSearchParams(location.search).has('force2d');
     const webgl = detectWebGL() && !force2d;
+    this.gpu = webgl ? detectGpu() : '';
+    const mobile = matchMedia('(pointer: coarse)').matches || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    this.gfxDetected = detectPreset(this.gpu, { mobile });
     if (!webgl) {
       this.ui.showCompatNote('WebGL is unavailable — using the 2D compatibility renderer. All modes remain playable.');
     }
@@ -145,7 +150,10 @@ class App {
     if (webgl) {
       import('./render.js').then(({ createRenderer3D }) => {
         if (this.renderer) return;
-        this.renderer = createRenderer3D(canvas3d, {});
+        const g = resolveGraphics(this.store.data.settings.graphics, this.gfxDetected);
+        this.renderer = createRenderer3D(canvas3d, {
+          gpu: this.gpu, detected: this.gfxDetected, antialias: g.antialias === 'msaa',
+        });
         this.renderer.onCameraChange = () => this.noteCameraMove();
         if (this.content) {
           this.renderer.setTheme(getTheme(this.store.data.cosmetics.theme));
@@ -990,18 +998,13 @@ class App {
   }
 
   frame(dt) {
-    // Frame-rate tracking → dynamic render scale before touching sim rate.
+    // Frame-rate tracking (adaptive resolution lives in the 3D renderer).
     this._frameAvg = this._frameAvg * 0.95 + dt * 0.05;
-    this._scaleCheckT = (this._scaleCheckT || 0) + dt;
-    if (this._scaleCheckT > 2000 && this.renderer?.kind === '3d') {
-      this._scaleCheckT = 0;
-      if (this._frameAvg > 24 && this._renderScale > 0.65) {
-        this._renderScale = Math.max(0.65, this._renderScale - 0.15);
-        this.renderer.setRenderScale(this._renderScale);
-      } else if (this._frameAvg < 12 && this._renderScale < 1) {
-        this._renderScale = Math.min(1, this._renderScale + 0.1);
-        this.renderer.setRenderScale(this._renderScale);
-      }
+    // Keep the Graphics summary (resolution, post status) current while visible.
+    this._gfxRefreshT = (this._gfxRefreshT || 0) + dt;
+    if (this._gfxRefreshT > 1000) {
+      this._gfxRefreshT = 0;
+      if (this.gfxPanel && !$('screen-settings').hidden) this.gfxPanel.refresh();
     }
 
     // Authoritative clock: quantized tick commands while active.
@@ -1312,7 +1315,7 @@ class App {
       if (bus === 'muted') this.audio.setMuted(value);
       else this.audio.setVolume(bus, value);
     }
-    if (path === 'graphics.tier') this.applyQuality();
+    if (path.startsWith('graphics.')) this.applyQuality();
     if (path === 'a11y.palette' && this.content) {
       this.renderer?.setBoard(this.content, this.resolvedPalette());
       if (this.session) this.renderer.syncState(this.session.state);
@@ -1343,17 +1346,35 @@ class App {
   }
 
   applyQuality() {
+    const g = resolveGraphics(this.store.data.settings.graphics, this.gfxDetected);
+    document.body.dataset.gfxPreset = g.preset;
     if (!this.renderer) return;
-    let tier = this.store.data.settings.graphics.tier;
-    if (tier === 'auto') {
-      const coarse = matchMedia('(pointer: coarse)').matches;
-      const small = Math.min(screen.width, screen.height) < 800;
-      const lowMem = (navigator.deviceMemory || 8) <= 3;
-      tier = lowMem ? 'low' : coarse && small ? 'medium' : 'high';
-    }
-    this._renderScale = 1;
-    this.renderer.setQuality(tier);
+    if (this.renderer.setGraphics) this.renderer.setGraphics(this.store.data.settings.graphics);
     this.renderer.setReducedMotion(this.store.data.settings.a11y.reducedMotion);
+    this.gfxPanel?.sync();
+  }
+
+  /** Graphics panel change: {preset} clears overrides; other keys patch. Applies live + persists. */
+  applyGraphics(patch) {
+    this.store.update((d) => {
+      const cur = d.settings.graphics;
+      d.settings.graphics = 'preset' in patch
+        ? withPreset(cur, PRESETS.includes(patch.preset) ? patch.preset : 'auto')
+        : { ...cur, ...patch };
+    });
+    this.platform.track('settings-change', { category: 'graphics' });
+    this.applyQuality();
+  }
+
+  mountGraphicsPanel() {
+    const root = $('gfx-panel');
+    if (!root) return;
+    this.gfxPanel = mountGraphicsPanel(root, {
+      get: () => this.store.data.settings.graphics,
+      info: () => this.renderer?.graphicsInfo?.() || null,
+      onChange: (patch) => this.applyGraphics(patch),
+      locale: navigator.language,
+    });
   }
 
   // --------------------------------------------------------- cloud save ----
@@ -1433,6 +1454,8 @@ class App {
       },
       onShowSettings: (from) => {
         this._settingsFrom = from;
+        // From the pause overlay: hide it so the settings screen is usable (Back reopens it).
+        if (from === 'pause') $('overlay-pause').hidden = true;
         this.renderSettingsScreen();
         this.ui.showScreen('settings');
       },
@@ -1508,6 +1531,8 @@ class App {
 
   renderSettingsScreen() {
     this.ui.syncSettings(this.store.data.settings, THEMES, this.store.data.cosmetics);
+    if (!this.gfxPanel) this.mountGraphicsPanel();
+    else this.gfxPanel.sync();
     this.ui.renderBindings(DEFAULT_BINDINGS, this.store.data.settings.controls.bindings, (actionId, key) => {
       this.store.update((d) => { d.settings.controls.bindings[actionId] = key; });
       this.renderSettingsScreen();
@@ -1533,6 +1558,24 @@ class App {
 }
 
 // ---------------------------------------------------------------------------
+// Unmasked GPU name (for Auto quality + the settings summary), from a
+// throwaway context that is released immediately.
+function detectGpu() {
+  try {
+    const cv = document.createElement('canvas');
+    const gl = cv.getContext('webgl2') || cv.getContext('webgl');
+    if (!gl) return '';
+    let name = '';
+    if (/Firefox/.test(navigator.userAgent)) name = gl.getParameter(gl.RENDERER); // unmasked there; the extension is deprecated
+    else {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    }
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return String(name || '');
+  } catch { return ''; }
+}
+
 function detectWebGL() {
   try {
     const cv = document.createElement('canvas');

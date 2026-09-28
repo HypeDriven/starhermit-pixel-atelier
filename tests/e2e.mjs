@@ -406,6 +406,92 @@ async function runPass(browser, name, ctxOpts, { full }) {
   console.log(`ok - ${name}: no page errors`);
 }
 
+// ---------- graphics settings pass (visible UI only) ----------
+// Opens Settings → Graphics, switches the Quality preset (Low → High → Ultra),
+// toggles one per-effect override and the frame-rate readout, confirms each is
+// applied (body[data-gfx-preset], the live cost summary, #fps-meter) and that
+// everything survives a reload. Console errors AND warnings fail the pass.
+async function runGraphicsPass(browser, name, ctxOpts) {
+  const errors = [];
+  const context = await browser.newContext(ctxOpts);
+  const page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => {
+    if ((m.type() !== 'error' && m.type() !== 'warning') || browserNoise.test(m.text())) return;
+    const url = m.location()?.url || '';
+    if (/Failed to load resource/.test(m.text()) && /\/api\/|\/favicon/.test(url)) return;
+    errors.push(`console.${m.type()}: ${m.text()}`);
+  });
+  const mobile = !!ctxOpts.isMobile;
+  const press = (sel) => (mobile ? page.tap(sel) : page.click(sel));
+  const preset = () => page.evaluate(() => document.body.dataset.gfxPreset);
+  const openGraphics = async () => {
+    await page.waitForSelector('#screen-title:not([hidden])', { timeout: 20000 });
+    await press('#btn-settings');
+    await page.waitForSelector('#screen-settings:not([hidden]) #gfx-panel #set-tier');
+    await page.locator('#gfx-panel').scrollIntoViewIfNeeded();
+  };
+  try {
+    await page.goto(BASE, { waitUntil: 'load' });
+    await openGraphics();
+    const autoLabel = await page.locator('#set-tier option[value="auto"]').textContent();
+    if (!/Auto \(detected: /.test(autoLabel)) throw new Error(`auto label: "${autoLabel}"`);
+    if ((await page.inputValue('#set-tier')) !== 'auto') throw new Error('default preset is not Auto');
+    ok(`${name}: Graphics panel open — "${autoLabel}", body preset=${await preset()}`);
+
+    // The panel fits the viewport (no horizontal cut-off).
+    const fit = await page.evaluate(() => {
+      const r = document.getElementById('gfx-panel').getBoundingClientRect();
+      return { left: r.left, right: r.right, vw: window.innerWidth, sw: document.documentElement.scrollWidth };
+    });
+    if (fit.left < 0 || fit.right > fit.vw + 0.5 || fit.sw > fit.vw + 0.5) throw new Error(`graphics panel cut off: ${JSON.stringify(fit)}`);
+
+    await page.selectOption('#set-tier', 'low');
+    await page.waitForFunction(() => document.body.dataset.gfxPreset === 'low');
+    await page.waitForFunction(() => /no shadows/.test(document.getElementById('gfx-summary').textContent));
+    await page.selectOption('#set-tier', 'high');
+    await page.waitForFunction(() => document.body.dataset.gfxPreset === 'high');
+    await page.waitForFunction(() => /2048² shadows/.test(document.getElementById('gfx-summary').textContent) && /bloom/.test(document.getElementById('gfx-summary').textContent));
+    const fromPreset = await page.locator('#gfx-bloom option[value="preset"]').textContent();
+    if (fromPreset !== 'From preset (On)') throw new Error(`bloom preset label: "${fromPreset}"`);
+    ok(`${name}: preset Low → High applied (summary: ${await page.textContent('#gfx-summary')})`);
+
+    // One per-effect override + the frame-rate readout.
+    await page.selectOption('#gfx-bloom', 'off');
+    await page.waitForFunction(() => !/bloom/.test(document.getElementById('gfx-summary').textContent));
+    await press('#gfx-fps');
+    await page.waitForSelector('#fps-meter:not([hidden])');
+    await page.fill('#gfx-scale', '75');
+    await page.waitForFunction(() => document.querySelector('output[for="gfx-scale"]').textContent === '75%');
+    await page.waitForTimeout(400); // store.update persists synchronously; let a frame render
+    ok(`${name}: bloom override off, frame-rate readout on, render scale 75%`);
+
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => document.body.dataset.gfxPreset === 'high', null, { timeout: 20000 });
+    await openGraphics();
+    const after = await page.evaluate(() => ({
+      tier: document.getElementById('set-tier').value,
+      bloom: document.getElementById('gfx-bloom').value,
+      scale: document.getElementById('gfx-scale').value,
+      fps: !document.getElementById('fps-meter')?.hidden,
+    }));
+    if (after.tier !== 'high' || after.bloom !== 'off' || after.scale !== '75' || !after.fps) throw new Error(`settings not persisted: ${JSON.stringify(after)}`);
+    ok(`${name}: graphics settings survive reload (${JSON.stringify(after)})`);
+
+    // Ultra, then a preset change clears the override.
+    await page.selectOption('#set-tier', 'ultra');
+    await page.waitForFunction(() => document.body.dataset.gfxPreset === 'ultra');
+    await page.waitForFunction(() => /4096² shadows/.test(document.getElementById('gfx-summary').textContent));
+    if ((await page.inputValue('#gfx-bloom')) !== 'preset') throw new Error('preset change did not clear the bloom override');
+    await page.waitForTimeout(1500);
+    ok(`${name}: Ultra applied; choosing a preset cleared overrides`);
+  } finally {
+    await context.close();
+  }
+  if (errors.length) throw new Error(`${name} graphics pass had console output:\n  ${errors.join('\n  ')}`);
+  console.log(`ok - ${name}: graphics pass — no console errors or warnings`);
+}
+
 // ---------- main ----------
 let browser = null;
 try {
@@ -417,6 +503,9 @@ try {
   await runPass(browser, 'desktop', { viewport: { width: 1280, height: 800 } }, { full: true });
   await runPass(browser, 'mobile',
     { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }, { full: false });
+  await runGraphicsPass(browser, 'desktop-graphics', { viewport: { width: 1280, height: 800 } });
+  await runGraphicsPass(browser, 'mobile-graphics',
+    { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   console.log('\nE2E PASS — pixel-atelier, desktop + mobile, no page errors');
 } catch (e) {
   failures++;

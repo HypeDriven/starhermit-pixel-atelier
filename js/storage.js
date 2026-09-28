@@ -2,6 +2,7 @@
 // cloud-conflict helpers. Works headless (in-memory backend) for tests.
 
 import { cyrb53 } from './rng.js';
+import { DEFAULT_GRAPHICS, migrateGraphics } from './gfx.js';
 
 export const SAVE_VERSION = 1;
 
@@ -61,7 +62,7 @@ export function defaultSaveData() {
 export function defaultSettings() {
   return {
     audio: { music: 0.6, effects: 0.9, ambience: 0.5, voice: 0.8, muted: false },
-    graphics: { tier: 'auto', renderScale: 1 },
+    graphics: { ...DEFAULT_GRAPHICS },       // see gfx.js (preset, render_scale, overrides)
     a11y: {
       palette: 'default',        // default | contrast | cvd
       reducedMotion: false,
@@ -89,7 +90,7 @@ function migrateData(data, fromVersion) {
   merged.settings = {
     ...def.settings, ...(d.settings || {}),
     audio: { ...def.settings.audio, ...(d.settings?.audio || {}) },
-    graphics: { ...def.settings.graphics, ...(d.settings?.graphics || {}) },
+    graphics: migrateGraphics(d.settings?.graphics),
     a11y: { ...def.settings.a11y, ...(d.settings?.a11y || {}) },
     controls: { ...def.settings.controls, ...(d.settings?.controls || {}) },
     camera: { ...def.settings.camera, ...(d.settings?.camera || {}) },
