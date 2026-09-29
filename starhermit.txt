@@ -1,4 +1,5 @@
 name=Pixel Atelier
+description=Color numbered pixel cells with painting and fill tools to reveal vibrant pixel artwork.
 launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=server.js
