@@ -77,7 +77,6 @@ export function defaultSettings() {
     },
     controls: { bindings: {} },  // action → key (overrides of DEFAULT_BINDINGS)
     camera: { autoFit: true },
-    telemetryConsent: false,
   };
 }
 

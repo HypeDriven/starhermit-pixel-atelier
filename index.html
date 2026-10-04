@@ -10,6 +10,8 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%2305070f'/><rect x='2' y='2' width='5' height='5' fill='%2322d3ee'/><rect x='9' y='2' width='5' height='5' fill='%23f472b6'/><rect x='2' y='9' width='5' height='5' fill='%23ffd166'/><rect x='9' y='9' width='5' height='5' fill='%233fd68f'/></svg>">
 <script src="browser-guard.js"></script>
+<script src="starhermit-sdk.js"></script>
+<script>StarHermit.init();</script>
 </head>
 <body>
 <a class="skip-link" href="#hud-palette">Skip to palette</a>
@@ -51,6 +53,8 @@
           <button id="btn-boards" class="btn ghost">Leaderboard</button>
           <button id="btn-settings" class="btn ghost">Settings</button>
           <button id="btn-help" class="btn ghost">How to play</button>
+          <button id="btn-invite" class="btn ghost" hidden>Invite a friend</button>
+          <button id="btn-signin" class="btn ghost" hidden>Sign in with StarHermit</button>
         </div>
       </div>
       <p id="title-note" class="fine"></p>
@@ -193,6 +197,7 @@
           <label class="check"><input type="checkbox" id="set-hold"> Hold to paint (off = toggle)</label>
           <label class="check"><input type="checkbox" id="set-timing"> Timing assistance (+50% time)</label>
           <div id="bindings-list" class="bindings"></div>
+          <button id="btn-reset-keys" class="btn ghost" type="button">Reset keys to defaults</button>
           <p class="fine">Select a binding, then press a key. Gamepad: D-pad moves the cursor, A paints, B cancels, X undoes, Y hints, shoulders cycle colors, Start pauses.</p>
         </fieldset>
         <fieldset>
@@ -200,7 +205,6 @@
           <div id="theme-list" class="theme-list"></div>
           <p class="fine">Themes change only materials and ambience — never gameplay.</p>
           <h3>Privacy</h3>
-          <label class="check"><input type="checkbox" id="set-telemetry"> Share anonymous usage stats</label>
           <button id="btn-replay-tutorials" class="btn ghost">Replay tutorials</button>
           <button id="btn-wipe" class="btn ghost danger">Erase local data</button>
         </fieldset>

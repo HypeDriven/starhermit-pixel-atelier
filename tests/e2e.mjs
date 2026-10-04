@@ -29,10 +29,9 @@
  * server), but the game is fully playable offline — with no launch token in
  * the URL, `Platform` stays in local guest mode (`hosted=false`) and every
  * screen works (platform.js). So, like the sibling static-SPA tests, this
- * embeds a minimal node:http static server on an ephemeral port and answers
- * /api/* probes with 200 `{}`; the client degrades to its documented offline
- * path with zero console noise. If the UI ever required the real backend
- * this could be swapped for spawning `server.js`; today it is not needed.
+ * embeds a minimal node:http static server on an ephemeral port (no API
+ * routes) and asserts a standalone load makes zero same-origin /api or /ws
+ * requests.
  *
  * Run: npm run test:e2e   (or: node tests/e2e.mjs)
  */
@@ -70,11 +69,6 @@ const server = http.createServer(async (req, res) => {
   try {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     if (p === '/') p = '/index.html';
-    if (p.startsWith('/api/')) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end('{}');
-      return;
-    }
     const file = path.normalize(path.join(ROOT, p));
     if (!file.startsWith(ROOT)) { res.writeHead(403).end('forbidden'); return; }
     const data = await readFile(file);
@@ -254,21 +248,30 @@ async function startCalmPractice(page) {
   }, null, { timeout: 10000 });
 }
 
+// Standalone (no launch token) must never call own-server routes.
+function watchOwnApi(page, errors) {
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (u.origin === new URL(BASE).origin && /^\/(api|ws)(\/|$)/.test(u.pathname)) errors.push(`own-server request: ${r.method()} ${u.pathname}`);
+  });
+}
+
 // ---------- one full pass ----------
 async function runPass(browser, name, ctxOpts, { full }) {
   const errors = [];
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  watchOwnApi(page, errors);
   page.on('console', (m) => {
     if (m.type() !== 'error' || browserNoise.test(m.text())) return;
     const url = m.location()?.url || '';
-    if (/Failed to load resource/.test(m.text()) && /\/api\/|\/favicon/.test(url)) return;
+    if (/Failed to load resource/.test(m.text()) && /\/favicon/.test(url)) return;
     errors.push(`console: ${m.text()}`);
   });
   page.on('response', (r) => {
     const p = r.url();
-    if (r.status() >= 400 && !/\/api\/|\/favicon/.test(p)) errors.push(`http ${r.status()}: ${p}`);
+    if (r.status() >= 400 && !/\/favicon/.test(p)) errors.push(`http ${r.status()}: ${p}`);
   });
 
   try {
@@ -416,10 +419,11 @@ async function runGraphicsPass(browser, name, ctxOpts) {
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  watchOwnApi(page, errors);
   page.on('console', (m) => {
     if ((m.type() !== 'error' && m.type() !== 'warning') || browserNoise.test(m.text())) return;
     const url = m.location()?.url || '';
-    if (/Failed to load resource/.test(m.text()) && /\/api\/|\/favicon/.test(url)) return;
+    if (/Failed to load resource/.test(m.text()) && /\/favicon/.test(url)) return;
     errors.push(`console.${m.type()}: ${m.text()}`);
   });
   const mobile = !!ctxOpts.isMobile;

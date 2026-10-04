@@ -12,9 +12,10 @@ import {
 import { Session, boardEntryFromSession, compareBoardEntries, boardIdFor, BUILD_VERSION } from './session.js';
 import { SaveStore } from './storage.js';
 import { Platform } from './platform.js';
+import { currentPlatformStrings } from './platform-i18n.js';
 import { AudioEngine } from './audio.js';
 import { UI, $, fmtTime } from './ui.js';
-import { resolve as resolveGraphics, detectPreset, withPreset, PRESETS } from './gfx.js';
+import { resolve as resolveGraphics, detectPreset, withPreset, PRESETS, migrateGraphics } from './gfx.js';
 import { mountGraphicsPanel } from './gfx-panel.js';
 
 // ---------------------------------------------------------------------------
@@ -28,18 +29,47 @@ const ACHIEVEMENTS = [
   { key: 'marathon-painter', name: 'Marathon Painter', desc: 'Paint 10,000 cells in total.' },
 ];
 
+// Keyboard actions (KeyboardEvent.code values), declared as control.* in
+// starhermit.txt. Rebinding in Settings stores overrides locally and, when
+// signed in, on StarHermit (which also wins on start).
 const DEFAULT_BINDINGS = [
-  { id: 'fill', label: 'Paint / confirm', def: 'Enter' },
-  { id: 'cancel', label: 'Cancel', def: 'Escape' },
-  { id: 'pause', label: 'Pause', def: 'p' },
-  { id: 'undo', label: 'Undo', def: 'u' },
-  { id: 'hint', label: 'Hint', def: 'h' },
-  { id: 'nextColor', label: 'Next color', def: 'e' },
-  { id: 'prevColor', label: 'Previous color', def: 'q' },
-  { id: 'regionTool', label: 'Region tool', def: 'r' },
-  { id: 'brushTool', label: 'Brush tool', def: 'b' },
-  { id: 'camReset', label: 'Reset camera', def: 'c' },
+  { id: 'fill', label: 'Paint / confirm', def: ['Enter', 'NumpadEnter'] },
+  { id: 'cancel', label: 'Cancel', def: ['Escape'] },
+  { id: 'pause', label: 'Pause', def: ['KeyP'] },
+  { id: 'undo', label: 'Undo', def: ['KeyU'] },
+  { id: 'hint', label: 'Hint', def: ['KeyH'] },
+  { id: 'nextColor', label: 'Next color', def: ['KeyE'] },
+  { id: 'prevColor', label: 'Previous color', def: ['KeyQ'] },
+  { id: 'regionTool', label: 'Region tool', def: ['KeyR'] },
+  { id: 'brushTool', label: 'Brush tool', def: ['KeyB'] },
+  { id: 'camReset', label: 'Reset camera', def: ['KeyC'] },
+  { id: 'cursorUp', label: 'Cursor up', def: ['ArrowUp', 'KeyW'] },
+  { id: 'cursorDown', label: 'Cursor down', def: ['ArrowDown', 'KeyS'] },
+  { id: 'cursorLeft', label: 'Cursor left', def: ['ArrowLeft', 'KeyA'] },
+  { id: 'cursorRight', label: 'Cursor right', def: ['ArrowRight', 'KeyD'] },
+  ...Array.from({ length: 9 }, (_, i) => ({ id: `color${i}`, label: `Swatch ${i}`, def: [`Digit${i}`, `Numpad${i}`] })),
 ];
+const DEFAULT_CODES = Object.fromEntries(DEFAULT_BINDINGS.map((a) => [a.id, a.def]));
+const CURSOR_DIRS = { cursorUp: [0, -1], cursorDown: [0, 1], cursorLeft: [-1, 0], cursorRight: [1, 0] };
+
+// Older saves stored one e.key value per action; map it to a code list.
+function toCodes(v) {
+  const list = Array.isArray(v) ? v : (typeof v === 'string' && v ? [v] : []);
+  return list.map((k) => {
+    if (/^[a-z]$/i.test(k)) return `Key${k.toUpperCase()}`;
+    if (/^[0-9]$/.test(k)) return `Digit${k}`;
+    if (k === ' ') return 'Space';
+    return k;
+  });
+}
+function keyLabel(code) {
+  const named = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc', Space: 'Space', NumpadEnter: 'Num Enter' };
+  if (named[code]) return named[code];
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return `Num ${code.slice(6)}`;
+  return String(code).replace(/[^\w ]/g, '');
+}
 
 // ---------------------------------------------------------------------------
 // App
@@ -99,14 +129,13 @@ class App {
     this.ui.setBoot(0.4, 'Contacting host…');
     this.platform.onSyncStatus = (s) => this.ui.setSyncStatus(s);
     await this.platform.init();
-    this.platform.setTelemetryConsent(this.store.data.settings.telemetryConsent);
     if (this.platform.hosted) {
-      this.platform.activityStart(); // dev-server only; no-op on-platform
       if (this.platform.profile?.name && this.store.data.profile.guest) {
         // Adopt the account nickname (never a username) for display + boards.
         this.store.update((d) => { d.profile.name = this.platform.profile.name; d.profile.guest = false; });
       }
       await this.syncCloudSave();
+      await this.syncPlatformPrefs();
     }
     // Resolve cloud revisions before changing the local revision for this boot.
     this.store.update((d) => { d.stats.sessions += 1; });
@@ -126,8 +155,8 @@ class App {
     await this.refreshDailyCard();
 
     this.bindInput();
+    this.wirePlatform();
     this.ui.setBoot(1, 'Ready');
-    this.platform.track('start', { mode: 'boot' });
 
     // Returning player: resume offers the last safe snapshot within 2 actions.
     const snapshot = this.store.loadSessionSnapshot();
@@ -203,6 +232,8 @@ class App {
     const done = Object.keys(d.journey.stars || {}).length;
     $('journey-sub').textContent = `${done} / ${JOURNEY.length} stages`;
     $('learn-sub').textContent = `${d.tutorials.done.length} / ${LESSONS.length} done`;
+    $('btn-signin').hidden = !this.platform.canSignIn();
+    $('btn-invite').hidden = !this.platform.inviteLink();
     $('title-note').textContent = this.platform.hosted
       ? `Signed in · build ${BUILD_VERSION}`
       : `Guest mode · build ${BUILD_VERSION} · progress saved locally`;
@@ -415,7 +446,6 @@ class App {
           this.ui.countdown(null);
           this.session.start();
           this.appState = 'active';
-          this.platform.startPresence();
           this.audio.startAmbience(getTheme(this.store.data.cosmetics.theme).ambience);
           if (!this.audio._music) this.audio.startMusic(content.seed);
           this.refreshHud(true);
@@ -591,7 +621,6 @@ class App {
   // --- terminal / results ---
   onTerminal(ev) {
     this.appState = 'resolving';
-    this.platform.stopPresence();
     this.store.clearSessionSnapshot();
     const state = this.session.state;
     const final = ev.final;
@@ -605,7 +634,6 @@ class App {
       if (complete) d.stats.roundsCompleted++;
       if (this.lesson && complete) {
         if (!d.tutorials.done.includes(this.lesson.def.id)) d.tutorials.done.push(this.lesson.def.id);
-        this.platform.track('tutorial-step', { step: this.lesson.def.id });
       }
       if (this.mode === 'journey' && complete) {
         const stars = this.starsFor(state);
@@ -628,7 +656,6 @@ class App {
         if (!d.achievements[key]) {
           d.achievements[key] = Date.now();
           unlockedAch.push(ACHIEVEMENTS.find((a) => a.key === key));
-          this.platform.unlockAchievement(key);
         }
       };
       if (complete) grant('first-completion');
@@ -654,7 +681,6 @@ class App {
 
     this.audio.play(complete ? 'complete' : 'failed');
     this.audio.setMusicIntensity(0);
-    this.platform.track('round-end', { mode: this.mode, outcome: ev.status });
     if (this.platform.hosted) this.platform.cloudSaveSoon(this.store.exportDoc());
 
     // Leaderboards.
@@ -691,17 +717,9 @@ class App {
         // self entry tracked implicitly by boards
       }
     });
-    // Ranked submission only exists on the bundled dev server (local
-    // development). On-platform, leaderboards are platform-owned and clients
-    // can never submit — personal bests stay local + cloud-saved.
-    if (this.content.meta.ranked && this.platform.devMode && !this._dailyExcluded) {
-      this.platform.submitScore(boardId, entry)
-        .then((res) => {
-          if (res?.rank) this.ui.toast(`Global board: #${res.rank}`);
-        })
-        .catch(() => { /* local result already shown; labeled casual */ });
-      preview += ' · submitted for validation';
-    } else if (this.content.meta.ranked) {
+    // Platform leaderboards are platform-owned and clients can never submit —
+    // personal bests stay local + cloud-saved.
+    if (this.content.meta.ranked) {
       preview += ' · casual (no validated board here)';
     }
     return preview;
@@ -765,7 +783,6 @@ class App {
   }
 
   resultsRetry() {
-    this.platform.track('retry', { mode: this.mode });
     if (this.mode === 'learn') {
       const lesson = LESSONS.find((l) => l.id === this.content.id);
       if (lesson) { this.startLesson(lesson); return; }
@@ -871,7 +888,6 @@ class App {
     this.stroke = null;
     this.pointers.clear();
     this.replayMode = false;
-    this.platform.stopPresence();
     if (clearSnapshot) this.store.clearSessionSnapshot();
   }
 
@@ -923,11 +939,40 @@ class App {
   }
 
   // ---------------------------------------------------------------- input --
+  /** Effective { action: codes[] }: defaults + saved/platform overrides. */
+  effectiveBindings() {
+    const overrides = this.store.data.settings.controls.bindings || {};
+    const out = {};
+    for (const a of DEFAULT_BINDINGS) {
+      const o = toCodes(overrides[a.id]);
+      out[a.id] = o.length ? o : a.def.slice();
+    }
+    return out;
+  }
+
+  /** code → action lookup for keydown routing. */
   bindings() {
     const out = {};
-    const overrides = this.store.data.settings.controls.bindings || {};
-    for (const a of DEFAULT_BINDINGS) out[overrides[a.id] || a.def] = a.id;
+    for (const [action, codes] of Object.entries(this.effectiveBindings())) {
+      for (const c of codes) if (!(c in out)) out[c] = action;
+    }
     return out;
+  }
+
+  // Rebind one action to a single code. A code already used by another
+  // action swaps over, so every code stays in exactly one action.
+  rebind(actionId, code) {
+    const eff = this.effectiveBindings();
+    const previous = eff[actionId];
+    const changed = { [actionId]: [code] };
+    for (const [other, codes] of Object.entries(eff)) {
+      if (other === actionId || !codes.includes(code)) continue;
+      const rest = codes.filter((c) => c !== code);
+      changed[other] = rest.length ? rest : previous.filter((c) => c !== code);
+    }
+    this.store.update((d) => { Object.assign(d.settings.controls.bindings, changed); });
+    this.platform.saveBindings(changed);
+    return changed;
   }
 
   bindInput() {
@@ -963,10 +1008,7 @@ class App {
     });
     window.addEventListener('resize', () => this.renderer?.resize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.renderer?.resize(), 60));
-    window.addEventListener('beforeunload', () => {
-      this.autosaveNow();
-      this.platform.activityEnd();
-    });
+    window.addEventListener('beforeunload', () => this.autosaveNow());
 
     // First gesture unlocks audio.
     const unlock = () => {
@@ -1169,11 +1211,11 @@ class App {
   // --- keyboard ---
   onKeyDown(e) {
     // Settings binding capture first.
-    if (this.ui.captureBindingKey(e.key)) { e.preventDefault(); return; }
+    if (this.ui.captureBindingKey(e.code)) { e.preventDefault(); return; }
     if (e.target.matches('input, select, textarea')) return;
     if (this.replayMode && e.key === 'Escape') { this.exitReplay(); return; }
 
-    const action = this.bindings()[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    const action = this.bindings()[e.code];
     const inRound = this.appState === 'active' || this.appState === 'paused';
 
     if (action === 'pause' && inRound) { e.preventDefault(); this.pauseToggle(); return; }
@@ -1184,8 +1226,8 @@ class App {
     if (this.appState !== 'active' || !this.session) return;
 
     const s = this.session.state;
-    const num = Number(e.key);
-    if (Number.isInteger(num) && e.key !== ' ' && num >= 0 && num < s.palette.length && num <= 8) {
+    const num = /^color\d$/.test(action || '') ? Number(action.slice(5)) : -1;
+    if (num >= 0 && num < s.palette.length) {
       // Number keys pick swatches (0/• picks background).
       e.preventDefault();
       this.session.select(num);
@@ -1208,8 +1250,7 @@ class App {
     }
 
     // Cursor navigation among legal targets.
-    const dirs = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0], w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0] };
-    const dir = dirs[e.key];
+    const dir = CURSOR_DIRS[action];
     if (dir) {
       e.preventDefault();
       if (this.keyboardCell < 0) {
@@ -1306,8 +1347,7 @@ class App {
       for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
       obj[parts[parts.length - 1]] = value;
     });
-    this.platform.setTelemetryConsent(this.store.data.settings.telemetryConsent);
-    this.platform.track('settings-change', { category: parts[0] });
+    this.platform.syncSettings(this.prefs());
     this.applySettingsToDom();
     this.applyA11yToRenderer();
     if (path.startsWith('audio.')) {
@@ -1362,7 +1402,7 @@ class App {
         ? withPreset(cur, PRESETS.includes(patch.preset) ? patch.preset : 'auto')
         : { ...cur, ...patch };
     });
-    this.platform.track('settings-change', { category: 'graphics' });
+    this.platform.syncSettings(this.prefs());
     this.applyQuality();
   }
 
@@ -1375,6 +1415,63 @@ class App {
       onChange: (patch) => this.applyGraphics(patch),
       locale: navigator.language,
     });
+  }
+
+  // ------------------------------------------------------- StarHermit -----
+  /** Player preferences mirrored to the StarHermit settings KV. */
+  prefs() {
+    const s = this.store.data.settings;
+    return { audio: s.audio, graphics: s.graphics, a11y: s.a11y, camera: s.camera };
+  }
+
+  // Platform settings and key bindings win over local values when signed in.
+  async syncPlatformPrefs() {
+    const [remote, keys] = await Promise.all([
+      this.platform.loadRemoteSettings(),
+      this.platform.loadBindings(this.effectiveBindings()),
+    ]);
+    const local = this.prefs();
+    this.store.update((d) => {
+      for (const [k, v] of Object.entries(remote)) {
+        if (!(k in local) || v == null || typeof v !== typeof local[k]) continue;
+        d.settings[k] = typeof v === 'object' ? { ...local[k], ...v } : v;
+      }
+      d.settings.graphics = migrateGraphics(d.settings.graphics);
+      for (const [id, codes] of Object.entries(keys)) {
+        if (JSON.stringify(codes) !== JSON.stringify(DEFAULT_CODES[id])) d.settings.controls.bindings[id] = codes;
+        else delete d.settings.controls.bindings[id];
+      }
+    });
+    this.applySettingsToDom();
+    this.platform.syncSettings(this.prefs());
+  }
+
+  // Title account buttons (sign-in / invite), key reset, sign-out handling.
+  wirePlatform() {
+    const t = currentPlatformStrings();
+    $('btn-signin').textContent = t.signIn;
+    $('btn-invite').textContent = t.invite;
+    $('btn-reset-keys').textContent = t.resetControls;
+    $('btn-signin').addEventListener('click', () => this.platform.signIn());
+    $('btn-invite').addEventListener('click', async () => {
+      const link = this.platform.inviteLink();
+      if (!link) return;
+      try {
+        await navigator.clipboard.writeText(link);
+        this.ui.toast(t.inviteCopied);
+      } catch {
+        this.ui.toast(t.inviteFailed.replace('{link}', link), 6000);
+      }
+    });
+    $('btn-reset-keys').addEventListener('click', () => {
+      this.store.update((d) => { d.settings.controls.bindings = {}; });
+      this.platform.resetBindings();
+      this.renderSettingsScreen();
+    });
+    this.platform.onAuthChange = ({ signedIn }) => {
+      if (!signedIn) this.ui.toast(t.signedOut, 5000);
+      this.refreshTitleCard();
+    };
   }
 
   // --------------------------------------------------------- cloud save ----
@@ -1419,10 +1516,6 @@ class App {
           if (entries) render(entries, 'Global board (read-only).', true);
           else render(local, 'No platform board for this game — local records only.');
         })
-        .catch(() => render(local, 'Offline — showing local (casual) board.'));
-    } else if (this.platform.devMode) {
-      this.platform.devLeaderboard(this._boardId, 'global')
-        .then((res) => render(res.entries || local, 'Validated global board.'))
         .catch(() => render(local, 'Offline — showing local (casual) board.'));
     } else {
       render(local, 'Local board — casual, unvalidated.');
@@ -1533,20 +1626,21 @@ class App {
     this.ui.syncSettings(this.store.data.settings, THEMES, this.store.data.cosmetics);
     if (!this.gfxPanel) this.mountGraphicsPanel();
     else this.gfxPanel.sync();
-    this.ui.renderBindings(DEFAULT_BINDINGS, this.store.data.settings.controls.bindings, (actionId, key) => {
-      this.store.update((d) => { d.settings.controls.bindings[actionId] = key; });
+    const eff = this.effectiveBindings();
+    const labels = Object.fromEntries(Object.entries(eff).map(([k, codes]) => [k, codes.map(keyLabel).join(' / ')]));
+    this.ui.renderBindings(DEFAULT_BINDINGS, labels, (actionId, code) => {
+      this.rebind(actionId, code);
       this.renderSettingsScreen();
-      this.ui.toast(`Binding updated: ${actionId} → ${key}`);
+      this.ui.toast(`Binding updated: ${actionId} → ${keyLabel(code)}`);
     });
   }
 
   helpCards() {
     const b = {};
-    const overrides = this.store.data.settings.controls.bindings || {};
-    for (const a of DEFAULT_BINDINGS) b[a.id] = (overrides[a.id] || a.def).toUpperCase();
+    for (const [id, codes] of Object.entries(this.effectiveBindings())) b[id] = codes.map(keyLabel).join(' / ');
     return [
       { title: 'Goal', body: 'Every cell hides a target color. Fill the whole canvas to reveal the artwork. The palette shows how many cells each color still needs.' },
-      { title: 'Paint', body: `Select a swatch, then click or drag across glowing cells. Keyboard: arrows move the cursor, <kbd>${b.fill}</kbd> paints. Drag only lands where the color belongs.` },
+      { title: 'Paint', body: `Select a swatch, then click or drag across glowing cells. Keyboard: <kbd>${b.cursorUp}</kbd> <kbd>${b.cursorLeft}</kbd> <kbd>${b.cursorDown}</kbd> <kbd>${b.cursorRight}</kbd> move the cursor, <kbd>${b.fill}</kbd> paints, number keys pick swatches. Drag only lands where the color belongs.` },
       { title: 'Region tool', body: `Press <kbd>${b.regionTool}</kbd> or the Region button, then click a shape to flood every connected cell of that color. It only fills cells matching your selected color.` },
       { title: 'Camera', body: `Wheel or pinch to zoom, right-drag or Pan mode to move, <kbd>${b.camReset}</kbd> to refit. On touch, two fingers pan and pinch.` },
       { title: 'Hints & undo', body: `<kbd>${b.hint}</kbd> highlights a legal cell (small score cost). <kbd>${b.undo}</kbd> reverts your last fill where the ruleset allows it.` },

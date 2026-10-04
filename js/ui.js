@@ -93,7 +93,6 @@ export class UI {
     S('set-lefty').addEventListener('change', () => handlers.onSetting?.('a11y.leftHanded', S('set-lefty').checked));
     S('set-hold').addEventListener('change', () => handlers.onSetting?.('a11y.holdToDrag', S('set-hold').checked));
     S('set-timing').addEventListener('change', () => handlers.onSetting?.('a11y.timingAssist', S('set-timing').checked));
-    S('set-telemetry').addEventListener('change', () => handlers.onSetting?.('telemetryConsent', S('set-telemetry').checked));
     S('btn-replay-tutorials').addEventListener('click', () => handlers.onReplayTutorials?.());
     S('btn-wipe').addEventListener('click', () => handlers.onWipe?.());
 
@@ -460,7 +459,6 @@ export class UI {
     S('set-lefty').checked = settings.a11y.leftHanded;
     S('set-hold').checked = settings.a11y.holdToDrag;
     S('set-timing').checked = settings.a11y.timingAssist;
-    S('set-telemetry').checked = settings.telemetryConsent === true;
 
     const list = $('theme-list');
     list.textContent = '';

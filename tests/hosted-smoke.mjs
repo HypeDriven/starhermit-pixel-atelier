@@ -23,10 +23,13 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/v1/time') return j(200, { now: Date.now() });
     if (u.pathname === '/api/v1/daily') return j(200, { date: new Date().toISOString().slice(0, 10), seed: 'daily:x', version: 1, excluded: false });
     if (['/api/v1/presence', '/api/v1/activity', '/api/v1/telemetry', '/api/v1/achievements', '/api/v1/scores'].includes(u.pathname)) return j(200, { ok: true });
-    if (u.pathname === '/api/v1/me/cloud-saves/pixel-atelier' && req.method === 'GET') return j(404, { error: 'not-found' });
-    if (u.pathname === '/api/v1/me/cloud-saves/pixel-atelier' && req.method === 'PUT') return j(200, { ok: true });
-    if (u.pathname === '/api/v1/games/pixel-atelier') return j(200, { leaderboardId: 'lb-1' });
-    if (u.pathname === '/api/v1/leaderboards/lb-1/entries') return j(200, { entries: [{ userId: 'u-1234-abcd', score: 1234, progressPct: 100, errors: 0, elapsedMs: 65000 }] });
+    const slot = decodeURIComponent(u.pathname) === '/api/v1/me/cloud-saves/game:pixel-atelier';
+    if (slot && req.method === 'GET') return j(404, { error: 'not-found' });
+    if (slot && req.method === 'PUT') return j(200, { ok: true });
+    if (u.pathname === '/api/v1/games/pixel-atelier/settings') return j(200, { settings: {} });
+    if (u.pathname === '/api/v1/games/pixel-atelier/controls') return j(200, { actions: [] });
+    if (u.pathname === '/api/v1/games/pixel-atelier/leaderboards') return j(200, [{ id: 'lb-1', key: 'score' }]);
+    if (u.pathname === '/api/v1/leaderboards/lb-1/entries') return j(200, { items: [{ userId: 'u-1234-abcd', score: 1234, progressPct: 100, errors: 0, elapsedMs: 65000 }] });
     return j(404, { error: 'not-found' });
   }
   let p = decodeURIComponent(u.pathname);
@@ -64,7 +67,7 @@ try {
   }));
   console.log('state:', JSON.stringify(state));
   if (!state.hosted || state.userId !== 'u-1234-abcd' || state.slug !== 'pixel-atelier') throw new Error('token decode/hosted wrong');
-  if (state.hash !== '#session_id=zzz') throw new Error('fragment not stripped correctly: ' + state.hash);
+  if (state.hash !== '') throw new Error('launch fragment not stripped: ' + state.hash); // the SDK consumes game_token + session_id
   if (state.name !== 'NeonFox') throw new Error('nickname not adopted: ' + state.name);
 
   // Read-only platform board with nickname resolution.
@@ -101,10 +104,10 @@ try {
   });
   await page.waitForFunction(() => window.__app?.appState === 'results', null, { timeout: 15000 });
   const t0 = Date.now();
-  while (!calls.some((c) => c.startsWith('PUT /api/v1/me/cloud-saves/pixel-atelier')) && Date.now() - t0 < 8000) {
+  while (!calls.some((c) => c.startsWith('PUT /api/v1/me/cloud-saves/game%3Apixel-atelier')) && Date.now() - t0 < 8000) {
     await new Promise((r) => setTimeout(r, 200));
   }
-  if (!calls.some((c) => c.startsWith('PUT /api/v1/me/cloud-saves/pixel-atelier'))) throw new Error('cloud PUT never fired');
+  if (!calls.some((c) => c.startsWith('PUT /api/v1/me/cloud-saves/game%3Apixel-atelier'))) throw new Error('cloud PUT never fired');
   console.log('cloud PUT observed after round end');
 
   if (errors.length) throw new Error('page errors:\n  ' + errors.join('\n  '));

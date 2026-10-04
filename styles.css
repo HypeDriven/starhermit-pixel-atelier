@@ -119,6 +119,7 @@ body.high-contrast {
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   transition: transform 0.06s, background 0.15s, border-color 0.15s;
 }
+.btn[hidden] { display: none; }
 .btn:hover { background: #1a2a4e; border-color: var(--accent-a); }
 .btn:active { transform: scale(0.97); }
 .btn.primary { background: linear-gradient(135deg, #0e7490, #0891b2); border-color: var(--accent-a); }
