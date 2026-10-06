@@ -153,16 +153,17 @@ body.high-contrast {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   background: #101a31; border: 1px solid var(--edge); border-radius: 10px; padding: 10px 14px;
 }
+#lesson-list li > .btn { flex: 1; align-items: flex-start; text-align: start; } /* lesson buttons span their card */
 
 /* ------------------------------------------------------------- journey --- */
 .journey-map { display: flex; flex-direction: column; gap: 16px; }
 .chapter h3 { margin: 0 0 8px; color: var(--accent-a); }
-.stage-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.stage-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; } /* minmax(0): long stage names must not push the row past the card */
 .stage-cell {
   aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--edge);
   background: #101a31; color: var(--text); cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font: inherit; padding: 4px; min-height: var(--tap);
+  font: inherit; padding: 4px; min-height: var(--tap); min-width: 0;
 }
 .stage-cell:hover:not(:disabled) { border-color: var(--accent-a); }
 .stage-cell:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -193,25 +194,28 @@ body.high-contrast {
 .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 700px) { .profile-grid { grid-template-columns: 1fr; } }
 .field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; margin: 8px 0; }
-.field input, .field select {
+.field input, .field select, #rival-name {
   font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var(--edge);
   background: #0a1225; color: var(--text); min-height: var(--tap);
 }
+#rival-name { flex: 1; min-width: 0; }
 .stat-list { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
 .stat-list dt { color: var(--dim); }
 .stat-list dd { margin: 0; font-variant-numeric: tabular-nums; }
 .ach-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.ach-list li { display: flex; gap: 10px; align-items: baseline; }
+.ach-list li { display: grid; grid-template-columns: 8.5em minmax(0, 1fr) auto; gap: 10px; align-items: baseline; }
 .ach-list li.locked { opacity: 0.5; }
 .ach-key { font-weight: 700; }
 .ach-when { color: var(--dim); font-size: 0.8rem; margin-left: auto; }
 
 /* ------------------------------------------------------------ settings --- */
-.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; grid-auto-flow: dense; } /* dense: the full-width Graphics panel must not leave a hole beside Audio */
 fieldset { border: 1px solid var(--edge); border-radius: 10px; padding: 12px 16px 16px; }
 legend { color: var(--accent-a); font-weight: 700; padding: 0 6px; }
-.slider { display: grid; grid-template-columns: 76px 1fr 36px; gap: 6px; align-items: center; margin: 8px 0; font-weight: 600; font-size: 0.92rem; }
+.slider { display: grid; grid-template-columns: 76px minmax(0, 1fr) 40px; gap: 6px; align-items: center; margin: 8px 0; font-weight: 600; font-size: 0.92rem; }
 .slider output { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+.slider input[type="range"] { width: 100%; min-width: 0; }
+.settings-grid > fieldset { min-width: 0; }
 .check { display: flex; gap: 10px; align-items: center; margin: 10px 0; font-weight: 600; }
 .check input { width: 22px; height: 22px; }
 input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
@@ -256,7 +260,7 @@ input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
 .toast {
   position: absolute; bottom: calc(96px + var(--sab)); left: 50%; transform: translateX(-50%);
   background: var(--panel); border: 1px solid var(--accent-a); border-radius: 999px;
-  padding: 10px 20px; z-index: 45; font-weight: 600; max-width: min(90vw, 70ch); text-align: center;
+  padding: 10px 20px; z-index: 45; font-weight: 600; max-width: min(calc(90vw / var(--ui-scale, 1)), 70ch); text-align: center;
 }
 .toast[hidden] { display: none; }
 
@@ -270,7 +274,7 @@ input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
 .countdown {
   position: absolute; inset: 0; z-index: 30; display: flex;
   align-items: center; justify-content: center;
-  font-size: clamp(4rem, 18vw, 9rem); font-weight: 900;
+  font-size: clamp(4rem, calc(18vw / var(--ui-scale, 1)), 9rem); font-weight: 900;
   color: var(--accent-a); text-shadow: 0 0 40px rgba(34, 211, 238, 0.6);
   pointer-events: none;
 }
@@ -320,7 +324,7 @@ input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
 .tray {
   position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(10px + var(--sab));
-  max-width: calc(100vw - 24px - var(--sal) - var(--sar));
+  max-width: calc(100vw / var(--ui-scale, 1) - 24px - var(--sal) - var(--sar));
   z-index: 13; /* above drawer tabs */
 }
 .palette {
@@ -345,7 +349,7 @@ input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
 /* Drawers (compact breakpoints) */
 .drawer {
   position: absolute; top: calc(70px + var(--sat)); bottom: calc(110px + var(--sab));
-  width: min(300px, 84vw); background: var(--panel); border: 1px solid var(--edge);
+  width: min(300px, calc(84vw / var(--ui-scale, 1))); background: var(--panel); border: 1px solid var(--edge);
   border-radius: var(--radius); padding: 14px; z-index: 25; overflow-y: auto;
 }
 #drawer-left { left: calc(12px + var(--sal)); }
@@ -369,7 +373,7 @@ input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
   .drawer-tab { display: block; }
   /* persistent compact lesson banner under the HUD (never inside the drawer) */
   .lesson-strip { display: block; position: absolute; left: 50%; transform: translateX(-50%); top: calc(56px + var(--sat, 0px));
-    max-width: min(92vw, 34rem); margin: 0; padding: 6px 12px; border-radius: 10px; z-index: 6;
+    max-width: min(calc(92vw / var(--ui-scale, 1)), 34rem); margin: 0; padding: 6px 12px; border-radius: 10px; z-index: 6;
     background: #0d2136; border: 1px solid var(--accent-a); font-size: 0.9rem; text-align: center; pointer-events: none; }
   .lesson-strip[hidden] { display: none; }
 }
@@ -393,7 +397,7 @@ input[type="range"] { accent-color: var(--accent-a); min-height: var(--tap); }
 @media (max-height: 500px) and (orientation: landscape) {
   .hud-top { padding-top: calc(4px + var(--sat)); }
   .tray { left: auto; right: calc(52px + var(--sar)); transform: none; bottom: calc(8px + var(--sab)); }
-  .palette { flex-direction: column; max-height: calc(100vh - 90px); overflow-y: auto; overflow-x: hidden; }
+  .palette { flex-direction: column; max-height: calc(100vh / var(--ui-scale, 1) - 90px); overflow-y: auto; overflow-x: hidden; }
   body.left-handed .tray { right: auto; left: calc(52px + var(--sal)); }
   .swatch { width: 52px; height: 46px; min-height: var(--tap); }
 }
@@ -428,3 +432,7 @@ body.reduced-motion * { transition: none !important; animation: none !important;
 }
 /* Title: let the drafting-table scene read through a lighter veil (the card stays opaque). */
 #screen-title { background: radial-gradient(ellipse at 50% 40%, rgba(10, 16, 36, 0.3), rgba(5, 7, 15, 0.78)); backdrop-filter: blur(1.5px); }
+
+/* Large screens: ui-scale.js sets --ui-scale (1 up to 1600x1000). Each DOM UI layer
+   zooms by it (vw/vh inside them are divided); the full-viewport canvases stay unzoomed. */
+.screen, .overlay, .toast, .captions, .countdown, #hud, .fps-meter, .skip-link { zoom: var(--ui-scale, 1); }
