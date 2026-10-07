@@ -192,7 +192,7 @@ No module may mutate rules state except through a validated command. Rendering c
 ## 6. StarHermit integration
 
 ### Packaging and launch
-- The distribution has `starhermit.txt` at its root (`name=Pixel Atelier`, `launch=index.html`, `server=server.js`, `control.*` lines). `index.html` loads the shared SDK `starhermit-sdk.js` (an unchanged copy of `tools/starhermit-sdk.js`) and calls `StarHermit.init()` before the game modules; `js/platform.js` is the game's adapter over `window.StarHermit`.
+- The distribution has `starhermit.txt` at its root (`name=Pixel Atelier`, `launch=index.html`, `server=score-script.js`, `control.*` lines). `score-script.js` is the StarHermit platform script: it range-checks a finished Score Chase total sent through `StarHermit.submitScores` and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`); `server.js` is the local dev server. `index.html` loads the shared SDK `starhermit-sdk.js` (an unchanged copy of `tools/starhermit-sdk.js`) and calls `StarHermit.init()` before the game modules; `js/platform.js` is the game's adapter over `window.StarHermit`.
 - The SDK reads `#game_token=` (library launch) or `#access_token=` (direct sign-in return), strips the launch fragment, takes the slug from the `game_scope` claim and renews the token via `POST /api/v1/games/{slug}/launch-token`. Tokens are never persisted. When renewal is refused the game toasts that it is signed out and keeps playing as a guest.
 - Without a token no StarHermit request is made. On `<id>.starhermit.com` without a token the title shows **Sign in with StarHermit**, which redirects through the platform sign-in.
 - The client never calls the bundled `server.js` routes (time, daily, presence, activity, telemetry, boards, achievements). Daily boundaries use the local UTC clock; without a launch token the game makes no network request beyond its static files.
@@ -206,10 +206,11 @@ No module may mutate rules state except through a validated command. Rendering c
 
 ### Achievements and leaderboards
 - Achievements are local (part of the cloud-saved doc); the platform has no server-declared achievements for this game.
-- The Leaderboard screen reads the game's first platform board read-only (friends scope available, nicknames resolved through profiles) when hosted; otherwise it shows the local casual board. The client never submits scores.
+- The Leaderboard screen reads the game's first platform board (friends scope available, nicknames resolved through profiles) when hosted; otherwise it shows the local casual board.
+- Signed in, every Score Chase round that ends on its own (complete or out of actions/time/errors; not abandoned) posts its total through `StarHermit.submitScores({ 'high-score': total })`; `score-script.js` posts it to the `high-score` board (integer, higher is better, 0–100,000). The results screen shows "Posting score to the leaderboard…", then "Leaderboard rank: #N" (or "Score posted to the leaderboard." / "Score not posted to the leaderboard."), localized in `js/platform-i18n.js`. Other modes post nothing; standalone posts nothing and shows no line.
 
 ### Not used
-- Matchmaking, sessions, chat, friends picker, replays, realtime rooms and voice: the game is solo.
+- Matchmaking, sessions (beyond the short practice session that posts a Score Chase result), chat, friends picker, replays, realtime rooms and voice: the game is solo.
 
 ## 7. Content, economy, and retention
 

@@ -101,7 +101,20 @@ export class Platform {
     return p ? p.displayName : `Player ${String(userId).slice(0, 6)}`;
   }
 
-  // --- leaderboards (platform-owned: clients read, never submit) ---
+  // Post a finished Score Chase round to the leaderboards (score-script.js);
+  // resolves { posted, rank } — rank on the high-score board, or null.
+  async submitScore(total) {
+    if (!this.hosted || typeof sdk().submitScores !== 'function') return { posted: false, rank: null };
+    const keys = await sdk().submitScores({ 'high-score': total }).catch(() => []);
+    if (!keys || !keys.includes('high-score')) return { posted: false, rank: null };
+    try {
+      const r = await sdk().leaderboard('high-score', { pageSize: 100 });
+      const me = ((r && r.items) || []).find((i) => i.userId === sdk().userId);
+      return { posted: true, rank: me ? me.rank : null };
+    } catch { return { posted: true, rank: null }; }
+  }
+
+  // --- leaderboards (platform-owned: clients read; Score Chase posts via submitScore) ---
   // Returns null when the game has no platform leaderboard — the caller then
   // shows local records only.
   async leaderboardEntries({ friendsOnly = false, pageSize = 50 } = {}) {

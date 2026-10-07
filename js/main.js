@@ -768,6 +768,23 @@ class App {
       canNext, nextLabel,
     });
     this.ui.announce(`${reasons[ev.reason]}. Score ${final.total}. ${Math.round(final.progressPct)} percent painted.`, true);
+    this.postToLeaderboard(ev, final);
+  }
+
+  // Signed in only: a Score Chase round that ended on its own posts its total
+  // to the platform high-score board; the results screen shows the rank.
+  postToLeaderboard(ev, final) {
+    const line = $('results-lb');
+    if (!line) return;
+    if (this.mode !== 'score-chase' || ev.reason === 'abandoned' || !this.platform.hosted) { line.hidden = true; line.textContent = ''; return; }
+    const t = currentPlatformStrings();
+    const session = this.session;
+    line.hidden = false;
+    line.textContent = t.lbPosting;
+    this.platform.submitScore(final.total).then((r) => {
+      if (this.session !== session) return;
+      line.textContent = !r.posted ? t.lbNotPosted : r.rank ? t.lbRank.replace('{rank}', r.rank) : t.lbPosted;
+    });
   }
 
   resultsNext() {

@@ -9,6 +9,10 @@ const EN_US = {
   inviteFailed: "Copy this invite link: {link}",
   signedOut: "Signed out of StarHermit — progress keeps saving on this device.",
   resetControls: "Reset keys to defaults",
+  lbPosting: "Posting score to the leaderboard…",
+  lbRank: "Leaderboard rank: #{rank}",
+  lbPosted: "Score posted to the leaderboard.",
+  lbNotPosted: "Score not posted to the leaderboard.",
 };
 
 const STRINGS = {
@@ -21,6 +25,10 @@ const STRINGS = {
     inviteFailed: "Copia este enlace de invitación: {link}",
     signedOut: "Se cerró la sesión de StarHermit; el progreso se sigue guardando en este dispositivo.",
     resetControls: "Restablecer teclas",
+    lbPosting: "Enviando la puntuación a la clasificación…",
+    lbRank: "Puesto en la clasificación: #{rank}",
+    lbPosted: "Puntuación enviada a la clasificación.",
+    lbNotPosted: "No se envió la puntuación a la clasificación.",
   },
   "es-ES": {
     signIn: "Iniciar sesión con StarHermit",
@@ -29,6 +37,10 @@ const STRINGS = {
     inviteFailed: "Copia este enlace de invitación: {link}",
     signedOut: "Se ha cerrado la sesión de StarHermit; el progreso se sigue guardando en este dispositivo.",
     resetControls: "Restablecer teclas",
+    lbPosting: "Enviando la puntuación a la clasificación…",
+    lbRank: "Puesto en la clasificación: #{rank}",
+    lbPosted: "Puntuación enviada a la clasificación.",
+    lbNotPosted: "No se ha enviado la puntuación a la clasificación.",
   },
   "de-DE": {
     signIn: "Mit StarHermit anmelden",
@@ -37,6 +49,10 @@ const STRINGS = {
     inviteFailed: "Kopiere diesen Einladungslink: {link}",
     signedOut: "Von StarHermit abgemeldet – der Fortschritt wird weiter auf diesem Gerät gespeichert.",
     resetControls: "Tasten zurücksetzen",
+    lbPosting: "Punktzahl wird an die Bestenliste gesendet …",
+    lbRank: "Platz in der Bestenliste: #{rank}",
+    lbPosted: "Punktzahl an die Bestenliste gesendet.",
+    lbNotPosted: "Punktzahl nicht an die Bestenliste gesendet.",
   },
   "fr-FR": {
     signIn: "Se connecter avec StarHermit",
@@ -45,6 +61,10 @@ const STRINGS = {
     inviteFailed: "Copiez ce lien d’invitation : {link}",
     signedOut: "Déconnecté de StarHermit — la progression reste enregistrée sur cet appareil.",
     resetControls: "Réinitialiser les touches",
+    lbPosting: "Envoi du score au classement…",
+    lbRank: "Rang au classement : #{rank}",
+    lbPosted: "Score envoyé au classement.",
+    lbNotPosted: "Score non envoyé au classement.",
   },
   "fr-CA": {
     signIn: "Se connecter avec StarHermit",
@@ -53,6 +73,10 @@ const STRINGS = {
     inviteFailed: "Copiez ce lien d’invitation : {link}",
     signedOut: "Déconnecté de StarHermit — la progression reste enregistrée sur cet appareil.",
     resetControls: "Réinitialiser les touches",
+    lbPosting: "Envoi du pointage au classement…",
+    lbRank: "Rang au classement : #{rank}",
+    lbPosted: "Pointage envoyé au classement.",
+    lbNotPosted: "Pointage non envoyé au classement.",
   },
   "pt-BR": {
     signIn: "Entrar com StarHermit",
@@ -61,6 +85,10 @@ const STRINGS = {
     inviteFailed: "Copie este link de convite: {link}",
     signedOut: "Você saiu do StarHermit — o progresso continua salvo neste dispositivo.",
     resetControls: "Redefinir teclas",
+    lbPosting: "Enviando a pontuação para o ranking…",
+    lbRank: "Posição no ranking: #{rank}",
+    lbPosted: "Pontuação enviada para o ranking.",
+    lbNotPosted: "A pontuação não foi enviada para o ranking.",
   },
   "it-IT": {
     signIn: "Accedi con StarHermit",
@@ -69,6 +97,10 @@ const STRINGS = {
     inviteFailed: "Copia questo link di invito: {link}",
     signedOut: "Disconnesso da StarHermit: i progressi continuano a essere salvati su questo dispositivo.",
     resetControls: "Ripristina tasti",
+    lbPosting: "Invio del punteggio alla classifica…",
+    lbRank: "Posizione in classifica: #{rank}",
+    lbPosted: "Punteggio inviato alla classifica.",
+    lbNotPosted: "Punteggio non inviato alla classifica.",
   },
 };
 
