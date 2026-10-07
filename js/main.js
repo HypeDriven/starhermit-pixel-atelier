@@ -130,11 +130,13 @@ class App {
     this.platform.onSyncStatus = (s) => this.ui.setSyncStatus(s);
     await this.platform.init();
     if (this.platform.hosted) {
+      await this.syncCloudSave();
+      // Adopt the account nickname (never a username) for display + boards,
+      // only after the cloud compare: the write bumps the local revision and
+      // would otherwise tie or beat a newer cloud save.
       if (this.platform.profile?.name && this.store.data.profile.guest) {
-        // Adopt the account nickname (never a username) for display + boards.
         this.store.update((d) => { d.profile.name = this.platform.profile.name; d.profile.guest = false; });
       }
-      await this.syncCloudSave();
       await this.syncPlatformPrefs();
     }
     // Resolve cloud revisions before changing the local revision for this boot.
