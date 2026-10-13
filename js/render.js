@@ -1261,10 +1261,10 @@ class DraftingTableRenderer {
     this.renderer.info.autoReset = false; // count every pass of the frame
     this.renderer.info.reset();
     if (this.composer) {
-      try { this.composer.render(dt); }
-      catch { this.postFailed = true; this.composer?.dispose(); this.composer = null; this.postKey = null; this.renderer.render(this.scene, this.camera); }
+      try { (globalThis.GameOptions ? globalThis.GameOptions.draw(this.composer.renderer, () => this.composer.render(dt)) : this.composer.render(dt)); }
+      catch { this.postFailed = true; this.composer?.dispose(); this.composer = null; this.postKey = null; (globalThis.GameOptions ? globalThis.GameOptions.draw(this.renderer, () => this.renderer.render(this.scene, this.camera)) : this.renderer.render(this.scene, this.camera)); }
     } else {
-      this.renderer.render(this.scene, this.camera);
+      (globalThis.GameOptions ? globalThis.GameOptions.draw(this.renderer, () => this.renderer.render(this.scene, this.camera)) : this.renderer.render(this.scene, this.camera));
     }
   }
 
