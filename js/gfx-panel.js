@@ -1,7 +1,7 @@
 // gfx-panel.js — the Settings screen's Graphics section: quality preset,
 // render scale, per-effect overrides, adaptive resolution, frame-rate readout
-// and a live cost summary. Strings are localized here (the rest of the game
-// is English-only); the locale comes from navigator.language.
+// and a live cost summary. Strings are localized here; the locale is the game
+// language (js/i18n.js), and main.js remounts the panel when it changes.
 
 import { PRESETS, CATEGORIES, SHADOW_MAP, presetTier, resolve } from './gfx.js';
 
@@ -187,17 +187,23 @@ export function summaryText(T, info) {
  */
 export function mountGraphicsPanel(root, { get, info, onChange, locale }) {
   const T = gfxStrings(locale);
-  root.textContent = '';
-  root.lang = pickLocale(locale);
-  const legend = document.createElement('legend');
+  // The panel draws into its own inner box: a remount (language change)
+  // rebuilds only the legend text and that box, so anything else mounted in
+  // the fieldset (the shared Sound / Language / Report sections) stays put.
+  let legend = root.querySelector(':scope > legend');
+  if (!legend) { legend = document.createElement('legend'); root.prepend(legend); }
   legend.textContent = T.graphics;
-  root.append(legend);
+  legend.removeAttribute('data-i18n');
+  let box = root.querySelector(':scope > .gfx-own');
+  if (!box) { box = document.createElement('div'); box.className = 'gfx-own'; legend.after(box); }
+  box.textContent = '';
+  box.lang = pickLocale(locale);
 
   const mkField = (label, control) => {
     const l = document.createElement('label');
     l.className = 'field';
     l.append(document.createTextNode(label), control);
-    root.append(l);
+    box.append(l);
     return l;
   };
 
@@ -224,7 +230,7 @@ export function mountGraphicsPanel(root, { get, info, onChange, locale }) {
     onChange({ render_scale: Number(scale.value) / 100 });
   });
   scaleWrap.append(document.createTextNode(T.renderScale), scale, scaleOut);
-  root.append(scaleWrap);
+  box.append(scaleWrap);
 
   const cats = {};
   const grid = document.createElement('div');
@@ -246,7 +252,7 @@ export function mountGraphicsPanel(root, { get, info, onChange, locale }) {
     grid.append(l);
     cats[cat] = sel;
   }
-  root.append(grid);
+  box.append(grid);
 
   const mkCheck = (id, key, label) => {
     const l = document.createElement('label');
@@ -257,7 +263,7 @@ export function mountGraphicsPanel(root, { get, info, onChange, locale }) {
     c.dataset.gfx = key;
     c.addEventListener('change', () => onChange({ [key]: c.checked }));
     l.append(c, document.createTextNode(' ' + label));
-    root.append(l);
+    box.append(l);
     return c;
   };
   const adaptive = mkCheck('gfx-adaptive', 'adaptive', T.adaptive);
@@ -272,7 +278,7 @@ export function mountGraphicsPanel(root, { get, info, onChange, locale }) {
   note.className = 'fine warn';
   note.textContent = T.postUnavailable;
   note.hidden = true;
-  root.append(summary, note);
+  box.append(summary, note);
 
   const sync = () => {
     const saved = get();

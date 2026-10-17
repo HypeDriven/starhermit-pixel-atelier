@@ -1,6 +1,6 @@
 // Pixel Atelier — strings for the StarHermit account controls (sign-in, invite,
-// sign-out notice), in the nine supported locales. Follows the browser
-// language.
+// sign-out notice, leaderboard line), in the nine supported locales, read in
+// the game language (js/i18n.js getLocale()) at use time.
 
 const EN_US = {
   signIn: "Sign in with StarHermit",

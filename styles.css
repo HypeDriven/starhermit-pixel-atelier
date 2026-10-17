@@ -436,3 +436,10 @@ body.reduced-motion * { transition: none !important; animation: none !important;
 /* Large screens: ui-scale.js sets --ui-scale (1 up to 1600x1000). Each DOM UI layer
    zooms by it (vw/vh inside them are divided); the full-viewport canvases stay unzoomed. */
 .screen, .overlay, .toast, .captions, .countdown, #hud, .fps-meter, .skip-link { zoom: var(--ui-scale, 1); }
+
+/* Shared Sound / Language / Report sections (game-options.js) inside the narrow
+   Graphics fieldset: give long (e.g. German) labels room on phones. */
+@media (max-width: 480px) {
+  #gfx-panel .game-options-row { grid-template-columns: minmax(0, 1fr) minmax(72px, 34%) auto; }
+  #gfx-panel .game-options-report .game-options-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}

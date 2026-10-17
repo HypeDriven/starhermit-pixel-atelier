@@ -102,6 +102,43 @@ function migrateData(data, fromVersion) {
   return merged;
 }
 
+// Progress merge for cloud conflicts: per-stage best stars/scores, earliest
+// achievement dates, unions of tutorials/unlocks/rivals/daily history, larger
+// lifetime stats; the daily streak follows the more recent last-played day.
+export function mergeSaveData(remote, local, { remoteSettings = false } = {}) {
+  const r = migrateData(remote, SAVE_VERSION), l = migrateData(local, SAVE_VERSION);
+  const maxMap = (a = {}, b = {}) => {
+    const out = { ...a };
+    for (const [k, v] of Object.entries(b)) out[k] = Math.max(Number(out[k]) || 0, Number(v) || 0);
+    return out;
+  };
+  const achievements = { ...r.achievements };
+  for (const [k, v] of Object.entries(l.achievements || {})) achievements[k] = achievements[k] ? Math.min(achievements[k], v) : v;
+  const history = { ...(r.daily.history || {}) };
+  for (const [k, v] of Object.entries(l.daily.history || {})) history[k] = { score: Math.max(history[k]?.score || 0, v?.score || 0) };
+  const newer = String(l.daily.lastDate || '') >= String(r.daily.lastDate || '') ? l.daily : r.daily;
+  const rivals = [...(r.rivals || [])].map((x) => ({ ...x }));
+  for (const x of l.rivals || []) {
+    const hit = rivals.find((y) => y.name === x.name);
+    if (hit) hit.best = Math.max(hit.best || 0, x.best || 0); else rivals.push({ ...x });
+  }
+  const pref = remoteSettings ? r : l;
+  const stats = {};
+  for (const k of new Set([...Object.keys(r.stats), ...Object.keys(l.stats)])) stats[k] = Math.max(Number(r.stats[k]) || 0, Number(l.stats[k]) || 0);
+  return {
+    ...l,
+    profile: pref.profile.guest && !(remoteSettings ? l : r).profile.guest ? (remoteSettings ? l : r).profile : pref.profile,
+    settings: pref.settings,
+    journey: { stars: maxMap(r.journey.stars, l.journey.stars), bestScores: maxMap(r.journey.bestScores, l.journey.bestScores) },
+    achievements,
+    daily: { ...newer, best: maxMap(r.daily.best, l.daily.best), history },
+    stats,
+    tutorials: { ...l.tutorials, done: [...new Set([...(r.tutorials.done || []), ...(l.tutorials.done || [])])] },
+    cosmetics: { ...pref.cosmetics, unlocked: [...new Set([...(r.cosmetics.unlocked || []), ...(l.cosmetics.unlocked || [])])] },
+    rivals,
+  };
+}
+
 export class SaveStore {
   constructor() {
     this.store = backend();
@@ -143,6 +180,21 @@ export class SaveStore {
   }
 
   exportDoc() { return wrap(this.data, this.rev); }
+
+  /**
+   * Merge a cloud document into this save: progress from both sides is kept
+   * (mergeSaveData); settings, profile and theme come from the remote copy only
+   * when `remoteSettings` (it was the newer revision at start-up). The merged
+   * revision is above both, so it never ties or loses to either copy.
+   */
+  mergeDoc(doc, { remoteSettings = false } = {}) {
+    const { checksum, ...body } = doc;
+    if (checksumOf(body) !== checksum) throw new Error('save: bad checksum');
+    const remote = migrateData(body.data, body.v);
+    this.data = mergeSaveData(remote, this.data, { remoteSettings });
+    this.rev = Math.max(this.rev, Number(body.rev) || 0);
+    return this.persist();
+  }
 
   importDoc(doc) {
     const { checksum, ...body } = doc;

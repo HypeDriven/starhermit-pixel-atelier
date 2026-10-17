@@ -25,6 +25,7 @@ export class Platform {
     this.syncStatus = 'offline';
     this.onSyncStatus = null;
     this.onAuthChange = null;   // ({ signedIn }) after the platform session ends
+    this.onSaveConflict = null; // (remoteDoc|null) after another device saved first
     this._sentSettings = {};
     // Read the launch token (no-op when index.html already did).
     const sh = sdk();
@@ -39,6 +40,13 @@ export class Platform {
     const sh = sdk();
     if (sh) {
       sh.on('saved', (ok) => this._setSyncStatus(ok ? 'synced' : 'offline'));
+      // A conditional cloud write lost to another device: reload the newer doc
+      // (lifting the SDK's write block) and let the game merge and re-save.
+      sh.on('saveconflict', async () => {
+        let remote = null;
+        try { remote = await sh.loadJSON(); } catch { remote = null; }
+        try { this.onSaveConflict?.(remote && typeof remote === 'object' ? remote : null); } catch { /* UI hook */ }
+      });
       sh.on('auth', (a) => {
         if (!a.signedIn) { this.profile = null; this._setSyncStatus('offline'); }
         try { this.onAuthChange?.({ signedIn: !!a.signedIn }); } catch { /* UI hook */ }
@@ -165,13 +173,14 @@ export class Platform {
     if (!this.hosted) return {};
     const s = (await sdk().getSettings()) || {};
     this._settingsLoaded = true; // no PATCH before the platform values were read
-    for (const [k, v] of Object.entries(s)) this._sentSettings[k] = JSON.stringify(v);
+    for (const [k, v] of Object.entries(s)) if (!k.startsWith('ui.')) this._sentSettings[k] = JSON.stringify(v);
     return s;
   }
   syncSettings(prefs) {
     if (!this.hosted || !this._settingsLoaded) return Promise.resolve(null);
     const patch = {};
     for (const [k, v] of Object.entries(prefs || {})) {
+      if (k.startsWith('ui.')) continue; // platform-owned keys (ui.language) are not game settings
       const json = JSON.stringify(v);
       if (this._sentSettings[k] !== json) { patch[k] = v; this._sentSettings[k] = json; }
     }

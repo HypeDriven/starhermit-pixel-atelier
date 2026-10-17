@@ -12,7 +12,11 @@ import {
 import { Session, boardEntryFromSession, compareBoardEntries, boardIdFor, BUILD_VERSION } from './session.js';
 import { SaveStore } from './storage.js';
 import { Platform } from './platform.js';
-import { currentPlatformStrings } from './platform-i18n.js';
+import { platformStrings, pickPlatformLocale } from './platform-i18n.js';
+import { t, getLocale, onLocaleChange, contentTitle, num } from './i18n.js';
+
+// StarHermit account strings in the game language (read at use time).
+const ps = () => platformStrings(pickPlatformLocale(getLocale()));
 import { AudioEngine } from './audio.js';
 import { UI, $, fmtTime } from './ui.js';
 import { resolve as resolveGraphics, detectPreset, withPreset, PRESETS, migrateGraphics } from './gfx.js';
@@ -28,6 +32,25 @@ const ACHIEVEMENTS = [
   { key: 'expert-milestone', name: 'Grand Atelier', desc: 'Complete the final journey stage.' },
   { key: 'marathon-painter', name: 'Marathon Painter', desc: 'Paint 10,000 cells in total.' },
 ];
+
+// Results headlines by terminal reason (translated at render time).
+const RESULT_REASONS = {
+  'all-filled': 'Canvas complete!',
+  'move-limit': 'Out of actions',
+  'time-limit': 'Out of time',
+  'error-limit': 'Too many errors',
+  'abandoned': 'Round abandoned',
+};
+
+// audio.js captions are en-US text ("Combo 12" carries a number).
+function captionText(text) {
+  const m = /^Combo (\d+)$/.exec(String(text));
+  return m ? t('Combo {n}', { n: m[1] }) : t(text);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 // Keyboard actions (KeyboardEvent.code values), declared as control.* in
 // starhermit.txt. Rebinding in Settings stores overrides locally and, when
@@ -108,25 +131,25 @@ class App {
   // ---------------------------------------------------------------- boot ---
   async boot() {
     this.ui.init(this._handlers());
-    this.audio.onCaption = (t) => {
-      if (this.store.data.settings.a11y.captions) this.ui.caption(t);
+    this.audio.onCaption = (text) => {
+      if (this.store.data.settings.a11y.captions) this.ui.caption(captionText(text));
     };
     this.audio.hapticsEnabled = this.store.data.settings.a11y.haptics;
 
-    this.ui.setBoot(0.1, 'Checking capabilities…');
+    this.ui.setBoot(0.1, t('Checking capabilities…'));
     const force2d = typeof location !== 'undefined' && new URLSearchParams(location.search).has('force2d');
     const webgl = detectWebGL() && !force2d;
     this.gpu = webgl ? detectGpu() : '';
     const mobile = matchMedia('(pointer: coarse)').matches || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     this.gfxDetected = detectPreset(this.gpu, { mobile });
     if (!webgl) {
-      this.ui.showCompatNote('WebGL is unavailable — using the 2D compatibility renderer. All modes remain playable.');
+      this.ui.showCompatNote(t('WebGL is unavailable — using the 2D compatibility renderer. All modes remain playable.'));
     }
 
-    this.ui.setBoot(0.25, 'Loading save…');
+    this.ui.setBoot(0.25, t('Loading save…'));
     this.applySettingsToDom();
 
-    this.ui.setBoot(0.4, 'Contacting host…');
+    this.ui.setBoot(0.4, t('Contacting host…'));
     this.platform.onSyncStatus = (s) => this.ui.setSyncStatus(s);
     await this.platform.init();
     if (this.platform.hosted) {
@@ -142,33 +165,36 @@ class App {
     // Resolve cloud revisions before changing the local revision for this boot.
     this.store.update((d) => { d.stats.sessions += 1; });
 
-    this.ui.setBoot(0.6, 'Validating content…');
+    this.ui.setBoot(0.6, t('Validating content…'));
     await frame();
     const problems = validateAllShipped();
     if (problems.length) console.error('content validation failed:', problems);
 
-    this.ui.setBoot(0.75, 'Building the drafting table…');
+    this.ui.setBoot(0.75, t('Building the drafting table…'));
     await frame();
     this.createRenderer(webgl);
     this.applyTheme();
     this.applyQuality();
 
-    this.ui.setBoot(0.9, 'Syncing daily table…');
+    this.ui.setBoot(0.9, t('Syncing daily table…'));
     await this.refreshDailyCard();
 
     this.bindInput();
     this.wirePlatform();
-    this.ui.setBoot(1, 'Ready');
+    this.wireLanguage();
+    this.ui.setBoot(1, t('Ready'));
 
     // Returning player: resume offers the last safe snapshot within 2 actions.
     const snapshot = this.store.loadSessionSnapshot();
     this.toTitle();
     if (snapshot && snapshot.log?.length) {
       const away = Date.now() - (snapshot.savedAt || Date.now());
+      const title = snapshot.content.meta?.title ? contentTitle(snapshot.content.meta.title) : snapshot.content.id;
       const yes = await this.ui.confirm(
-        `You have an unfinished round (${snapshot.content.meta?.title || snapshot.content.id})` +
-        (away > 60000 ? ` — paused ${fmtTime(away)} ago.` : '.') + ' Resume it?',
-        'Welcome back'
+        away > 60000
+          ? t('You have an unfinished round ({title}) — paused {time} ago. Resume it?', { title, time: fmtTime(away) })
+          : t('You have an unfinished round ({title}). Resume it?', { title }),
+        t('Welcome back')
       );
       if (yes) this.resumeSnapshot(snapshot);
       else this.store.clearSessionSnapshot();
@@ -232,13 +258,13 @@ class App {
   refreshTitleCard() {
     const d = this.store.data;
     const done = Object.keys(d.journey.stars || {}).length;
-    $('journey-sub').textContent = `${done} / ${JOURNEY.length} stages`;
-    $('learn-sub').textContent = `${d.tutorials.done.length} / ${LESSONS.length} done`;
+    $('journey-sub').textContent = t('{done} / {total} stages', { done, total: JOURNEY.length });
+    $('learn-sub').textContent = t('{done} / {total} done', { done: d.tutorials.done.length, total: LESSONS.length });
     $('btn-signin').hidden = !this.platform.canSignIn();
     $('btn-invite').hidden = !this.platform.inviteLink();
     $('title-note').textContent = this.platform.hosted
-      ? `Signed in · build ${BUILD_VERSION}`
-      : `Guest mode · build ${BUILD_VERSION} · progress saved locally`;
+      ? t('Signed in · build {build}', { build: BUILD_VERSION })
+      : t('Guest mode · build {build} · progress saved locally', { build: BUILD_VERSION });
   }
 
   async refreshDailyCard() {
@@ -246,8 +272,8 @@ class App {
     const today = this.platform.utcDateString();
     const doneToday = this.store.data.daily.history?.[info.date || today];
     $('daily-sub').textContent = doneToday
-      ? `Done today · best ${doneToday.score}`
-      : `Streak ${this.store.data.daily.streak} · new canvas`;
+      ? t('Done today · best {score}', { score: doneToday.score })
+      : t('Streak {n} · new canvas', { n: this.store.data.daily.streak });
   }
 
   // --- mode selection / setup ---
@@ -270,30 +296,31 @@ class App {
 
   async showSetup(mode, preset) {
     this.appState = 'mode-select';
+    this._setupArgs = [mode, preset];
     const body = $('setup-body');
     body.textContent = '';
     const desc = document.createElement('div');
-    let startLabel = 'Start';
+    let startLabel = t('Start');
     const assist = this.store.data.settings.a11y.timingAssist;
 
     const addRulesSummary = (content, extra = '') => {
       const r = content.ruleset;
       const rows = [
-        ['Canvas', `${content.width}×${content.height} · ${content.palette.length} colors`],
+        ['Canvas', t('{w}×{h} · {n} colors', { w: content.width, h: content.height, n: content.palette.length })],
         ['Difficulty', '★'.repeat(difficultyOf(content))],
         ['Expected', fmtTime(content.par.timeMs)],
-        ['Ranked', content.meta.ranked ? 'Yes — validated board' : 'No'],
+        ['Ranked', content.meta.ranked ? t('Yes — validated board') : t('No')],
       ];
-      if (r.moveLimit != null) rows.push(['Move limit', `${r.moveLimit} actions`]);
-      if (r.timeLimitMs != null) rows.push(['Time limit', fmtTime(assist ? r.timeLimitMs * 1.5 : r.timeLimitMs) + (assist ? ' (assist)' : '')]);
-      if (!r.errorPrevention) rows.push(['Errors', `Count against you${r.errorLimit ? ` · fail at ${r.errorLimit}` : ''}`]);
-      if (!r.tools.region) rows.push(['Tools', 'Region tool disabled']);
-      if (r.sequence) rows.push(['Order', 'Colors unlock in sequence']);
+      if (r.moveLimit != null) rows.push(['Move limit', t('{n} actions', { n: r.moveLimit })]);
+      if (r.timeLimitMs != null) rows.push(['Time limit', fmtTime(assist ? r.timeLimitMs * 1.5 : r.timeLimitMs) + (assist ? ' ' + t('(assist)') : '')]);
+      if (!r.errorPrevention) rows.push(['Errors', r.errorLimit ? t('Count against you · fail at {n}', { n: r.errorLimit }) : t('Count against you')]);
+      if (!r.tools.region) rows.push(['Tools', t('Region tool disabled')]);
+      if (r.sequence) rows.push(['Order', t('Colors unlock in sequence')]);
       rows.push(['Seed', content.seed]);
       const dl = document.createElement('dl');
       dl.className = 'stat-list';
       for (const [k, v] of rows) {
-        const dt = document.createElement('dt'); dt.textContent = k;
+        const dt = document.createElement('dt'); dt.textContent = t(k);
         const dd = document.createElement('dd'); dd.textContent = v;
         dl.append(dt, dd);
       }
@@ -307,20 +334,20 @@ class App {
     };
 
     if (mode === 'journey' && preset) {
-      $('setup-h').textContent = preset.meta.title;
-      addRulesSummary(preset, preset.meta.mastery ? 'Mastery table — combined mechanics.' : 'Journey stage.');
+      $('setup-h').textContent = contentTitle(preset.meta.title);
+      addRulesSummary(preset, preset.meta.mastery ? t('Mastery table — combined mechanics.') : t('Journey stage.'));
       this._pendingSetup = { mode, content: preset };
     } else if (mode === 'daily') {
-      $('setup-h').textContent = 'Daily Table';
+      $('setup-h').textContent = t('Daily Table');
       const info = await this.platform.dailyInfo();
       const content = dailyContent(info.date);
       this._dailyExcluded = info.excluded === true;
       addRulesSummary(content,
-        this._dailyExcluded ? 'This day was excluded from ranking due to a content issue.' : 'One shared seed per UTC day.');
+        this._dailyExcluded ? t('This day was excluded from ranking due to a content issue.') : t('One shared seed per UTC day.'));
       const cd = document.createElement('p');
       cd.className = 'dim';
       desc.appendChild(cd);
-      const tickCd = () => { cd.textContent = `Next table in ${fmtTime(this.platform.msUntilNextUtcDay())} (platform time).`; };
+      const tickCd = () => { cd.textContent = t('Next table in {time} (platform time).', { time: fmtTime(this.platform.msUntilNextUtcDay()) }); };
       tickCd();
       clearInterval(this._dailyCdT);
       this._dailyCdT = setInterval(() => {
@@ -328,54 +355,60 @@ class App {
         else tickCd();
       }, 1000);
       this._pendingSetup = { mode, content };
-      startLabel = 'Start daily';
+      startLabel = t('Start daily');
     } else if (mode === 'practice') {
-      $('setup-h').textContent = 'Practice';
+      $('setup-h').textContent = t('Practice');
       const sel = document.createElement('select');
       sel.id = 'practice-preset';
       sel.className = 'field';
       for (const [id, p] of Object.entries(PRACTICE_PRESETS)) {
         const o = document.createElement('option');
-        o.value = id; o.textContent = `${p.label} — ${p.blurb}`;
+        o.value = id; o.textContent = `${t(p.label)} — ${t(p.blurb)}`;
         sel.appendChild(o);
       }
-      sel.value = 'standard';
+      sel.value = this._practicePreset || 'standard';
+      sel.addEventListener('change', () => { this._practicePreset = sel.value; });
       const seedInput = document.createElement('input');
-      seedInput.type = 'text'; seedInput.placeholder = 'Seed (blank = random)'; seedInput.maxLength = 40;
-      seedInput.setAttribute('aria-label', 'Practice seed');
+      seedInput.type = 'text'; seedInput.placeholder = t('Seed (blank = random)'); seedInput.maxLength = 40;
+      seedInput.setAttribute('aria-label', t('Practice seed'));
       const wrap = document.createElement('div');
-      wrap.innerHTML = '<p class="dim">Unranked. Restart and undo freely — nothing here affects ratings.</p>';
-      const lf = document.createElement('label'); lf.className = 'field'; lf.textContent = 'Difficulty'; lf.appendChild(sel);
-      const ls = document.createElement('label'); ls.className = 'field'; ls.textContent = 'Seed (inspectable)'; ls.appendChild(seedInput);
+      const note = document.createElement('p'); note.className = 'dim';
+      note.textContent = t('Unranked. Restart and undo freely — nothing here affects ratings.');
+      wrap.append(note);
+      const lf = document.createElement('label'); lf.className = 'field'; lf.textContent = t('Difficulty'); lf.appendChild(sel);
+      const ls = document.createElement('label'); ls.className = 'field'; ls.textContent = t('Seed (inspectable)'); ls.appendChild(seedInput);
       wrap.append(lf, ls);
       desc.appendChild(wrap);
       this._pendingSetup = { mode, make: () => practiceContent(sel.value, seedInput.value.trim() || undefined) };
     } else if (mode === 'challenge') {
-      $('setup-h').textContent = 'Challenge';
+      $('setup-h').textContent = t('Challenge');
       const sel = document.createElement('select');
       for (const [id, c] of Object.entries(CHALLENGE_TYPES)) {
         const o = document.createElement('option');
-        o.value = id; o.textContent = `${c.label} — ${c.blurb}`;
+        o.value = id; o.textContent = `${t(c.label)} — ${t(c.blurb)}`;
         sel.appendChild(o);
       }
+      if (this._challengeType) sel.value = this._challengeType;
+      sel.addEventListener('change', () => { this._challengeType = sel.value; });
       const lvl = document.createElement('select');
       for (const [v, l] of [[1, 'I — small'], [2, 'II — medium'], [3, 'III — large']]) {
-        const o = document.createElement('option'); o.value = v; o.textContent = l; lvl.appendChild(o);
+        const o = document.createElement('option'); o.value = v; o.textContent = t(l); lvl.appendChild(o);
       }
-      lvl.value = 2;
+      lvl.value = this._challengeLevel || 2;
+      lvl.addEventListener('change', () => { this._challengeLevel = lvl.value; });
       const wrap = document.createElement('div');
-      const lf = document.createElement('label'); lf.className = 'field'; lf.textContent = 'Challenge'; lf.appendChild(sel);
-      const ll = document.createElement('label'); ll.className = 'field'; ll.textContent = 'Level'; ll.appendChild(lvl);
+      const lf = document.createElement('label'); lf.className = 'field'; lf.textContent = t('Challenge'); lf.appendChild(sel);
+      const ll = document.createElement('label'); ll.className = 'field'; ll.textContent = t('Level'); ll.appendChild(lvl);
       wrap.append(lf, ll);
       desc.appendChild(wrap);
       this._pendingSetup = { mode, make: () => challengeContent(sel.value, Number(lvl.value)) };
     } else if (mode === 'score-chase') {
-      $('setup-h').textContent = 'Score Chase';
+      $('setup-h').textContent = t('Score Chase');
       const week = this.platform.isoWeekString();
       const content = scoreChaseContent(week);
-      addRulesSummary(content, 'Same seed for everyone this week. Highest validated total wins.');
+      addRulesSummary(content, t('Same seed for everyone this week. Highest validated total wins.'));
       this._pendingSetup = { mode, content };
-      startLabel = 'Start chase';
+      startLabel = t('Start chase');
     }
 
     body.appendChild(desc);
@@ -422,12 +455,12 @@ class App {
     this.ui.showScreen(null);
     this.ui.showHUD(true);
     this.ui.syncLayout();
-    this.ui.setHudInfo(content.meta.title, mode.replace('-', ' '));
+    this.ui.setHudInfo(contentTitle(content.meta.title), t('mode.' + mode));
     this.ui.setObjective(this.objectiveText(content));
     this.ui.setTool(this.tool, content.ruleset.tools);
     this.refreshHud(true);
     this.updatePalette();
-    this.ui.announce(`${content.meta.title}. ${this.objectiveText(content)}`);
+    this.ui.announce(`${contentTitle(content.meta.title)}. ${this.objectiveText(content)}`);
 
     // Countdown — input locked during this shortest resolution phase.
     this.appState = 'countdown';
@@ -442,7 +475,7 @@ class App {
         this.audio.play('ui.tap');
         this._cdT = setTimeout(step, 700);
       } else {
-        this.ui.countdown('Go!');
+        this.ui.countdown(t('Go!'));
         this.audio.play('resume');
         this._cdT = setTimeout(() => {
           this.ui.countdown(null);
@@ -459,11 +492,11 @@ class App {
 
   objectiveText(content) {
     const r = content.ruleset;
-    if (r.sequence) return 'Fill colors in order — the palette shows which is active.';
-    if (r.moveLimit != null) return `Fill every cell within ${r.moveLimit} actions.`;
-    if (r.timeLimitMs != null) return `Fill every cell before time runs out.`;
-    if (r.errorLimit != null) return `Fill every cell. ${r.errorLimit} wrong cells end the round.`;
-    return 'Fill every cell with its target color.';
+    if (r.sequence) return t('Fill colors in order — the palette shows which is active.');
+    if (r.moveLimit != null) return t('Fill every cell within {n} actions.', { n: r.moveLimit });
+    if (r.timeLimitMs != null) return t('Fill every cell before time runs out.');
+    if (r.errorLimit != null) return t('Fill every cell. {n} wrong cells end the round.', { n: r.errorLimit });
+    return t('Fill every cell with its target color.');
   }
 
   startLesson(lesson) {
@@ -472,8 +505,8 @@ class App {
     // Set after startRound — teardownSession clears lesson state.
     this.lesson = { def: lesson, fills: 0, strokeCells: new Map(), maxStroke: 0, cameraMoved: false, hinted: false };
     this.lessonStep = 0;
-    this.ui.setLesson(lesson.title, lesson.intro);
-    this.ui.announce(`Lesson: ${lesson.title}. ${lesson.intro}`, true);
+    this.ui.setLesson(t(lesson.title), t(lesson.intro));
+    this.ui.announce(t('Lesson: {title}. {intro}', { title: t(lesson.title), intro: t(lesson.intro) }), true);
     this._lessonStarted = false;
   }
 
@@ -482,8 +515,8 @@ class App {
     if (!L) return;
     const step = L.def.steps[this.lessonStep];
     if (step) {
-      this.ui.setLesson(L.def.title, `Step ${this.lessonStep + 1}/${L.def.steps.length}: ${step.text}`);
-      this.ui.announce(step.text);
+      this.refreshLessonText();
+      this.ui.announce(t(step.text));
     }
   }
 
@@ -518,8 +551,18 @@ class App {
       this.audio.play('lesson.step');
       this.lessonStep++;
       if (this.lessonStep < L.def.steps.length) this.advanceLesson();
-      else this.ui.setLesson(L.def.title, 'Lesson complete!');
+      else this.ui.setLesson(t(L.def.title), t('Lesson complete!'));
     }
+  }
+
+  // Lesson box text for the current step (also re-run on a language change).
+  refreshLessonText() {
+    const L = this.lesson;
+    if (!L) return;
+    const step = L.def.steps[this.lessonStep];
+    if (!this._lessonStarted) this.ui.setLesson(t(L.def.title), t(L.def.intro));
+    else if (step) this.ui.setLesson(t(L.def.title), t('Step {n}/{total}: {text}', { n: this.lessonStep + 1, total: L.def.steps.length, text: t(step.text) }));
+    else this.ui.setLesson(t(L.def.title), t('Lesson complete!'));
   }
 
   noteCameraMove() {
@@ -549,7 +592,7 @@ class App {
         case 'error':
           this.audio.play('error');
           this.ui.setCombo(0);
-          this.ui.announce(`Wrong color — target was ${ev.target}.`, true);
+          this.ui.announce(t('Wrong color — target was {n}.', { n: ev.target }), true);
           break;
         case 'invalid': {
           // Mid-stroke rejections (filled/wrong cells under a drag) are
@@ -558,8 +601,8 @@ class App {
           if (!quiet) {
             this.audio.play('invalid');
             if (ev.message) {
-              this.ui.toast(ev.message);
-              this.ui.announce(ev.message, true);
+              this.ui.toast(t(ev.message));
+              this.ui.announce(t(ev.message), true);
             }
           }
           break;
@@ -569,10 +612,10 @@ class App {
         case 'hint': {
           this.audio.play('hint');
           if (ev.hint?.type === 'fill') {
-            this.ui.toast(`Try ${ev.hint.tool === 'region' ? 'the region tool on' : 'painting'} the highlighted cell.`);
+            this.ui.toast(ev.hint.tool === 'region' ? t('Try the region tool on the highlighted cell.') : t('Try painting the highlighted cell.'));
             this.flashHint(ev.hint.cell, ev.hint.tool === 'region');
           } else if (ev.hint?.type === 'select') {
-            this.ui.toast(`This color is finished — switch to color ${ev.hint.color === 0 ? '•' : ev.hint.color}.`);
+            this.ui.toast(t('This color is finished — switch to color {n}.', { n: ev.hint.color === 0 ? '•' : ev.hint.color }));
           }
           break;
         }
@@ -676,7 +719,7 @@ class App {
       for (const [id, ok] of unlocks) {
         if (ok && !d.cosmetics.unlocked.includes(id)) {
           d.cosmetics.unlocked.push(id);
-          this.ui.toast(`Theme unlocked: ${getTheme(id).name}`);
+          this.ui.toast(t('Theme unlocked: {name}', { name: t(getTheme(id).name) }));
         }
       }
     });
@@ -709,7 +752,7 @@ class App {
     boards[boardId] = list.slice(0, 50);
     this.store.saveBoards(boards);
     const rank = list.indexOf(entry) + 1;
-    let preview = `Local board: #${rank} of ${list.length}`;
+    let preview = { rank, total: list.length, ranked: false };
     // Rival best tracking.
     this.store.update((d) => {
       for (const r of d.rivals) {
@@ -721,9 +764,7 @@ class App {
     });
     // Platform leaderboards are platform-owned and clients can never submit —
     // personal bests stay local + cloud-saved.
-    if (this.content.meta.ranked) {
-      preview += ' · casual (no validated board here)';
-    }
+    if (this.content.meta.ranked) preview.ranked = true;
     return preview;
   }
 
@@ -736,39 +777,45 @@ class App {
   }
 
   showResults(ev, final, achievements, boardPreview, boardId, entry) {
-    const state = this.session.state;
-    const complete = ev.status === 'complete';
-    const reasons = {
-      'all-filled': 'Canvas complete!',
-      'move-limit': 'Out of actions',
-      'time-limit': 'Out of time',
-      'error-limit': 'Too many errors',
-      'abandoned': 'Round abandoned',
-    };
-    let canNext = false;
-    let nextLabel = 'Next';
-    if (this.mode === 'journey' && complete) {
-      const idx = JOURNEY.findIndex((s) => s.id === this.content.id);
-      if (idx >= 0 && idx + 1 < JOURNEY.length) { canNext = true; nextLabel = 'Next stage'; }
-    } else if (this.mode === 'learn') {
-      const idx = LESSONS.findIndex((l) => l.id === this.content.id);
-      if (idx >= 0 && idx + 1 < LESSONS.length) { canNext = true; nextLabel = 'Next lesson'; }
-    }
+    this._results = { ev, final, achievements, boardPreview };
     this._lastBoardId = boardId;
     this.ui.showHUD(false);
     this.ui.showScreen('results');
+    this.renderResults();
+    const reason = RESULT_REASONS[ev.reason];
+    this.ui.announce(t('{reason}. Score {score}. {pct} percent painted.', { reason: reason ? t(reason) : ev.status, score: final.total, pct: Math.round(final.progressPct) }), true);
+    this.postToLeaderboard(ev, final);
+  }
+
+  // Results texts in the current language (also re-run on a language change).
+  renderResults() {
+    const r = this._results;
+    if (!r || !this.session) return;
+    const { ev, final, achievements, boardPreview } = r;
+    const state = this.session.state;
+    const complete = ev.status === 'complete';
+    let canNext = false;
+    let nextLabel = t('Next');
+    if (this.mode === 'journey' && complete) {
+      const idx = JOURNEY.findIndex((s) => s.id === this.content.id);
+      if (idx >= 0 && idx + 1 < JOURNEY.length) { canNext = true; nextLabel = t('Next stage'); }
+    } else if (this.mode === 'learn') {
+      const idx = LESSONS.findIndex((l) => l.id === this.content.id);
+      if (idx >= 0 && idx + 1 < LESSONS.length) { canNext = true; nextLabel = t('Next lesson'); }
+    }
+    const preview = boardPreview
+      ? t('Local board: #{rank} of {total}', { rank: boardPreview.rank, total: boardPreview.total }) + (boardPreview.ranked ? ' · ' + t('casual (no validated board here)') : '')
+      : null;
     this.ui.renderResults({
-      headline: reasons[ev.reason] || ev.status,
+      headline: RESULT_REASONS[ev.reason] ? t(RESULT_REASONS[ev.reason]) : ev.status,
       stars: this.mode === 'journey' ? this.starsFor(state) : 0,
       breakdown: final,
-      progressText: `${final.progressPct}% painted · ${final.correct} cells · ${final.actions} actions · best combo ×${final.bestCombo} · ${fmtTime(final.elapsedMs)}`,
+      progressText: t('{pct}% painted · {cells} cells · {actions} actions · best combo ×{combo} · {time}', { pct: final.progressPct, cells: final.correct, actions: final.actions, combo: final.bestCombo, time: fmtTime(final.elapsedMs) }),
       achievements,
-      boardPreview: complete ? boardPreview : null,
-      seedText: `Seed ${this.content.seed} · content v${this.content.version}`,
+      boardPreview: complete ? preview : null,
+      seedText: t('Seed {seed} · content v{version}', { seed: this.content.seed, version: this.content.version }),
       canNext, nextLabel,
     });
-    this.ui.announce(`${reasons[ev.reason]}. Score ${final.total}. ${Math.round(final.progressPct)} percent painted.`, true);
-    this.postToLeaderboard(ev, final);
   }
 
   // Signed in only: a Score Chase round that ended on its own posts its total
@@ -777,14 +824,24 @@ class App {
     const line = $('results-lb');
     if (!line) return;
     if (this.mode !== 'score-chase' || ev.reason === 'abandoned' || !this.platform.hosted) { line.hidden = true; line.textContent = ''; return; }
-    const t = currentPlatformStrings();
     const session = this.session;
-    line.hidden = false;
-    line.textContent = t.lbPosting;
+    this._lb = { session, state: 'posting' };
+    this.refreshLeaderboardLine();
     this.platform.submitScore(final.total).then((r) => {
       if (this.session !== session) return;
-      line.textContent = !r.posted ? t.lbNotPosted : r.rank ? t.lbRank.replace('{rank}', r.rank) : t.lbPosted;
+      this._lb = { session, state: !r.posted ? 'notPosted' : r.rank ? 'rank' : 'posted', rank: r.rank };
+      this.refreshLeaderboardLine();
     });
+  }
+
+  refreshLeaderboardLine() {
+    const line = $('results-lb');
+    const lb = this._lb;
+    if (!line || !lb || lb.session !== this.session) return;
+    const s = ps();
+    line.hidden = false;
+    line.textContent = lb.state === 'posting' ? s.lbPosting : lb.state === 'notPosted' ? s.lbNotPosted
+      : lb.state === 'rank' ? s.lbRank.replace('{rank}', lb.rank) : s.lbPosted;
   }
 
   resultsNext() {
@@ -821,7 +878,7 @@ class App {
     this.ui.showScreen(null);
     this.ui.showHUD(true);
     this.replayMode = true;
-    this.ui.toast('Replay — press Esc to exit');
+    this.ui.toast(t('Replay — press Esc to exit'));
     const replay = new Session(snapshot.content, {
       onEvents: (events, state) => this.renderer?.applyEvents(events, state),
     });
@@ -837,7 +894,7 @@ class App {
       await sleep(this.store.data.settings.a11y.reducedMotion ? 20 : 90);
     }
     if (this.replayMode) {
-      this.ui.toast('Replay finished');
+      this.ui.toast(t('Replay finished'));
       await sleep(900);
       this.replayMode = false;
       this.appState = 'results';
@@ -866,7 +923,8 @@ class App {
       this.session.pause();
       this.appState = 'paused';
       const s = this.session.state;
-      this.ui.openPause(`${this.content.meta.title} — ${s.stats.correct}/${s.w * s.h} cells, ${fmtTime(s.elapsedMs)} elapsed`);
+      this._pauseSummary = () => t('{title} — {done}/{total} cells, {time} elapsed', { title: contentTitle(this.content.meta.title), done: s.stats.correct, total: s.w * s.h, time: fmtTime(s.elapsedMs) });
+      this.ui.openPause(this._pauseSummary());
       this.autosaveNow();
     } else if (this.session.status === 'paused') {
       this.resumeRound();
@@ -884,7 +942,7 @@ class App {
     if (!this.session) { this.toTitle(); return; }
     const terminal = rules.isTerminal(this.session.state);
     if (!terminal) {
-      const yes = await this.ui.confirm('Leave this round? Progress on this canvas will be lost.', 'Leave round');
+      const yes = await this.ui.confirm(t('Leave this round? Progress on this canvas will be lost.'), t('Leave round'));
       if (!yes) return;
       this.session.abandon();
     }
@@ -893,7 +951,7 @@ class App {
   }
 
   async restartRound() {
-    const yes = await this.ui.confirm('Restart this canvas from scratch?', 'Restart round');
+    const yes = await this.ui.confirm(t('Restart this canvas from scratch?'), t('Restart round'));
     if (!yes) return;
     this.ui.closePause();
     this.resultsRetry();
@@ -932,17 +990,18 @@ class App {
       this.ui.showScreen(null);
       this.ui.showHUD(true);
       this.ui.syncLayout();
-      this.ui.setHudInfo(this.content.meta.title, this.mode.replace('-', ' '));
+      this.ui.setHudInfo(contentTitle(this.content.meta.title), t('mode.' + this.mode));
       this.ui.setObjective(this.objectiveText(this.content));
       this.ui.setTool(this.tool, this.content.ruleset.tools);
       this.refreshHud(true);
-      const awayText = away > 45000 ? ` You were away ${fmtTime(away)} — the table waited, clock paused.` : '';
-      this.ui.openPause(`Restored from your last safe snapshot.${awayText}`);
-      this.ui.toast(`Round restored.${awayText}`);
+      const awayText = () => (away > 45000 ? ' ' + t('You were away {time} — the table waited, clock paused.', { time: fmtTime(away) }) : '');
+      this._pauseSummary = () => t('Restored from your last safe snapshot.') + awayText();
+      this.ui.openPause(this._pauseSummary());
+      this.ui.toast(t('Round restored.') + awayText());
     } catch (err) {
       console.error('restore failed', err);
       this.store.clearSessionSnapshot();
-      this.ui.toast('Could not restore the saved round — starting fresh.');
+      this.ui.toast(t('Could not restore the saved round — starting fresh.'));
     }
   }
 
@@ -1281,8 +1340,9 @@ class App {
         if (x >= 0 && y >= 0 && x < s.w && y < s.h) this.keyboardCell = y * s.w + x;
       }
       this.renderer?.setKeyboardCursor(this.keyboardCell);
-      const t = s.targets[this.keyboardCell];
-      this.ui.announce(`Cell ${this.keyboardCell % s.w + 1}, ${Math.floor(this.keyboardCell / s.w) + 1} — wants color ${t === 0 ? 'background' : t}${s.filled[this.keyboardCell] ? ', filled' : ''}`);
+      const target = s.targets[this.keyboardCell];
+      const cellArgs = { x: this.keyboardCell % s.w + 1, y: Math.floor(this.keyboardCell / s.w) + 1, color: target === 0 ? t('background') : target };
+      this.ui.announce(t(s.filled[this.keyboardCell] ? 'Cell {x}, {y} — wants color {color}, filled' : 'Cell {x}, {y} — wants color {color}', cellArgs));
       return;
     }
   }
@@ -1301,7 +1361,7 @@ class App {
 
   setTool(tool) {
     if (tool === 'region' && this.session && !this.session.state.ruleset.tools.region) {
-      this.ui.toast('The region tool is disabled in this ruleset.');
+      this.ui.toast(t('The region tool is disabled in this ruleset.'));
       return;
     }
     this.tool = tool;
@@ -1432,7 +1492,7 @@ class App {
       get: () => this.store.data.settings.graphics,
       info: () => this.renderer?.graphicsInfo?.() || null,
       onChange: (patch) => this.applyGraphics(patch),
-      locale: navigator.language,
+      locale: getLocale(),
     });
   }
 
@@ -1452,7 +1512,8 @@ class App {
     const local = this.prefs();
     this.store.update((d) => {
       for (const [k, v] of Object.entries(remote)) {
-        if (!(k in local) || v == null || typeof v !== typeof local[k]) continue;
+        // platform-owned ui.* keys (ui.language) are not game settings
+        if (k.startsWith('ui.') || !(k in local) || v == null || typeof v !== typeof local[k]) continue;
         d.settings[k] = typeof v === 'object' ? { ...local[k], ...v } : v;
       }
       d.settings.graphics = migrateGraphics(d.settings.graphics);
@@ -1467,19 +1528,22 @@ class App {
 
   // Title account buttons (sign-in / invite), key reset, sign-out handling.
   wirePlatform() {
-    const t = currentPlatformStrings();
-    $('btn-signin').textContent = t.signIn;
-    $('btn-invite').textContent = t.invite;
-    $('btn-reset-keys').textContent = t.resetControls;
+    const label = () => {
+      $('btn-signin').textContent = ps().signIn;
+      $('btn-invite').textContent = ps().invite;
+      $('btn-reset-keys').textContent = ps().resetControls;
+    };
+    label();
+    onLocaleChange(label);
     $('btn-signin').addEventListener('click', () => this.platform.signIn());
     $('btn-invite').addEventListener('click', async () => {
       const link = this.platform.inviteLink();
       if (!link) return;
       try {
         await navigator.clipboard.writeText(link);
-        this.ui.toast(t.inviteCopied);
+        this.ui.toast(ps().inviteCopied);
       } catch {
-        this.ui.toast(t.inviteFailed.replace('{link}', link), 6000);
+        this.ui.toast(ps().inviteFailed.replace('{link}', link), 6000);
       }
     });
     $('btn-reset-keys').addEventListener('click', () => {
@@ -1488,30 +1552,68 @@ class App {
       this.renderSettingsScreen();
     });
     this.platform.onAuthChange = ({ signedIn }) => {
-      if (!signedIn) this.ui.toast(t.signedOut, 5000);
+      if (!signedIn) this.ui.toast(ps().signedOut, 5000);
       this.refreshTitleCard();
+    };
+    // Another device saved first: reload, merge (best progress of both, this
+    // device's settings), save the merged copy.
+    this.platform.onSaveConflict = (remote) => {
+      if (remote) this.adoptMerged(remote, false);
+      this.platform.cloudSaveSoon(this.store.exportDoc());
     };
   }
 
+  // Live language switching: static markup is re-applied by i18n.js; screens,
+  // HUD and panels built in code re-render in place (round and timers untouched).
+  wireLanguage() {
+    onLocaleChange(() => {
+      const screen = document.getElementById('app').dataset.screen;
+      this.refreshTitleCard();
+      this.refreshDailyCard();
+      if (screen === 'learn') this.ui.renderLessons(LESSONS, this.store.data.tutorials.done, (lesson) => this.startLesson(lesson));
+      if (screen === 'journey') this.ui.renderJourney(JOURNEY_CHAPTERS, JOURNEY, this.store.data, (stage) => this.showSetup('journey', stage));
+      if (screen === 'setup' && this._setupArgs) this.showSetup(...this._setupArgs);
+      if (screen === 'results') this.renderResults();
+      if (screen === 'profile') this.ui.renderProfile(this.store.data, ACHIEVEMENTS, this.platform.hosted, this.platform.syncStatus);
+      if (screen === 'board') this.showBoard(this._boardId, this._boardScope);
+      if (screen === 'help') this.ui.renderHelp(this.helpCards());
+      if (screen === 'settings') {
+        this.ui.syncSettings(this.store.data.settings, THEMES, this.store.data.cosmetics);
+        this.renderBindingsList();
+      }
+      if (this.gfxPanel) this.mountGraphicsPanel();
+      this.refreshLeaderboardLine();
+      if (this.content && this.session) {
+        this.ui.setHudInfo(contentTitle(this.content.meta.title), t('mode.' + this.mode));
+        this.ui.setObjective(this.objectiveText(this.content));
+        this.refreshHud(true);
+        this.refreshLessonText();
+        if (this.ui.pauseOpen && this._pauseSummary) $('pause-summary').textContent = this._pauseSummary();
+      }
+    });
+  }
+
   // --------------------------------------------------------- cloud save ----
+  // Start-up / manual sync: the cloud copy is merged with this device's save
+  // (best progress of both; settings from the newer revision), never adopted
+  // wholesale, and the merged copy is mirrored back.
   async syncCloudSave() {
     const remote = await this.platform.cloudLoad();
     if (!remote) return;
     const localDoc = this.store.exportDoc();
     const resolution = SaveStore.resolveRevision(localDoc, remote);
-    if (resolution === 'remote') {
-      try { this.store.importDoc(remote); } catch { /* keep local */ }
-    } else if (resolution === 'conflict') {
-      const useRemote = await this.ui.confirm(
-        'A different save exists in the cloud. Use the cloud copy? (Choose Cancel to keep this device\'s copy — both are preserved until you pick.)',
-        'Save conflict'
-      );
-      if (useRemote) {
-        try { this.store.importDoc(remote); } catch { /* keep local */ }
-      } else {
-        this.platform.cloudSaveSoon(this.store.exportDoc());
-      }
-    }
+    if (resolution === 'local' && remote.rev === localDoc.rev) return; // same content
+    this.adoptMerged(remote, resolution === 'remote');
+    this.platform.cloudSaveSoon(this.store.exportDoc());
+  }
+
+  adoptMerged(remoteDoc, remoteSettings) {
+    try { this.store.mergeDoc(remoteDoc, { remoteSettings }); } catch { return; }
+    this.applySettingsToDom();
+    this.applyA11yToRenderer();
+    this.applyTheme();
+    this.applyQuality();
+    if (this.appState === 'title') this.refreshTitleCard();
   }
 
   // -------------------------------------------------------------- boards ---
@@ -1526,18 +1628,18 @@ class App {
       const filtered = scope === 'friends' && !preFiltered ? entries.filter((e) => friends.has(e.name)) : entries;
       this.ui.renderBoard(filtered.sort(compareBoardEntries), scope, note, this.store.data.profile.name);
     };
-    $('board-h').textContent = 'Leaderboard';
-    $('board-sub').textContent = this._boardLabel || `Board ${this._boardId}`;
+    $('board-h').textContent = t('Leaderboard');
+    $('board-sub').textContent = this._boardLabel ? this._boardLabel() : t('Board {id}', { id: this._boardId });
     if (this.platform.hosted) {
       // Platform board: read-only, nicknames resolved from user ids.
       this.platform.leaderboardEntries({ friendsOnly: scope === 'friends' })
         .then((entries) => {
-          if (entries) render(entries, 'Global board (read-only).', true);
-          else render(local, 'No platform board for this game — local records only.');
+          if (entries) render(entries, t('Global board (read-only).'), true);
+          else render(local, t('No platform board for this game — local records only.'));
         })
-        .catch(() => render(local, 'Offline — showing local (casual) board.'));
+        .catch(() => render(local, t('Offline — showing local (casual) board.')));
     } else {
-      render(local, 'Local board — casual, unvalidated.');
+      render(local, t('Local board — casual, unvalidated.'));
     }
     this.ui.showScreen('board');
   }
@@ -1547,7 +1649,7 @@ class App {
     return {
       onNav: (where) => {
         if (where === 'title') {
-          if (this.appState === 'paused') { this.ui.showScreen(null); this.ui.openPause(''); }
+          if (this.appState === 'paused') { this.ui.showScreen(null); this.ui.openPause(this._pauseSummary?.() || ''); }
           else this.toTitle();
         }
       },
@@ -1579,7 +1681,7 @@ class App {
       onResume: () => this.resumeRound(),
       onRestartRound: () => this.restartRound(),
       onLeaveRound: () => this.leaveRound(),
-      onSkipAnim: () => { this.renderer?.settle(); this.ui.toast('Animations skipped — state is exact.'); },
+      onSkipAnim: () => { this.renderer?.settle(); this.ui.toast(t('Animations skipped — state is exact.')); },
       onUndo: () => this.session?.undo(),
       onHint: () => this.session?.hint(),
       onTool: (tool) => this.setTool(tool),
@@ -1588,7 +1690,7 @@ class App {
       onPanMode: () => {
         this.panMode = !this.panMode;
         this.ui.setPanMode(this.panMode);
-        this.ui.toast(this.panMode ? 'Pan mode — drag moves the camera' : 'Paint mode');
+        this.ui.toast(this.panMode ? t('Pan mode — drag moves the camera') : t('Paint mode'));
       },
       onSelectColor: (idx) => this.session?.select(idx),
       onCycleColor: (dir) => this.cycleColor(dir),
@@ -1603,10 +1705,10 @@ class App {
       },
       onReplayTutorials: () => {
         this.store.update((d) => { d.tutorials.done = []; });
-        this.ui.toast('Tutorials reset — find them under Learn.');
+        this.ui.toast(t('Tutorials reset — find them under Learn.'));
       },
       onWipe: async () => {
-        const yes = await this.ui.confirm('Erase all local progress, settings and boards? This cannot be undone.', 'Erase local data');
+        const yes = await this.ui.confirm(t('Erase all local progress, settings and boards? This cannot be undone.'), t('Erase local data'));
         if (yes) {
           localStorage.clear();
           location.reload();
@@ -1627,15 +1729,16 @@ class App {
       },
       onCloudSync: () => this.platform.flushCloudSave()
         .then(() => this.syncCloudSave())
-        .then(() => this.ui.toast('Cloud save synced.')),
+        .then(() => this.ui.toast(t('Cloud save synced.'))),
       onBoardScope: (scope) => this.showBoard(this._boardId, scope),
       onShowBoard: (which) => {
         const week = this.platform.isoWeekString();
         const weekly = boardIdFor({ mode: 'score-chase', id: `chase-${week}` });
         if (which === 'round' && this._lastBoardId) {
-          this.showBoard(this._lastBoardId, 'global', this.content?.meta.title || 'This canvas');
+          const title = this.content?.meta.title;
+          this.showBoard(this._lastBoardId, 'global', () => (title ? contentTitle(title) : t('This canvas')));
         } else {
-          this.showBoard(weekly, 'global', `Score Chase — week ${week}`);
+          this.showBoard(weekly, 'global', () => t('Score Chase — week {week}', { week }));
         }
       },
     };
@@ -1645,27 +1748,34 @@ class App {
     this.ui.syncSettings(this.store.data.settings, THEMES, this.store.data.cosmetics);
     if (!this.gfxPanel) this.mountGraphicsPanel();
     else this.gfxPanel.sync();
+    this.renderBindingsList();
+  }
+
+  renderBindingsList() {
     const eff = this.effectiveBindings();
     const labels = Object.fromEntries(Object.entries(eff).map(([k, codes]) => [k, codes.map(keyLabel).join(' / ')]));
     this.ui.renderBindings(DEFAULT_BINDINGS, labels, (actionId, code) => {
       this.rebind(actionId, code);
       this.renderSettingsScreen();
-      this.ui.toast(`Binding updated: ${actionId} → ${keyLabel(code)}`);
+      const action = DEFAULT_BINDINGS.find((a) => a.id === actionId);
+      const name = actionId.startsWith('color') ? t('Swatch {n}', { n: actionId.slice(5) }) : t(action ? action.label : actionId);
+      this.ui.toast(t('Binding updated: {action} → {key}', { action: name, key: keyLabel(code) }));
     });
   }
 
   helpCards() {
     const b = {};
     for (const [id, codes] of Object.entries(this.effectiveBindings())) b[id] = codes.map(keyLabel).join(' / ');
+    const k = (code) => `<kbd>${escapeHtml(code)}</kbd>`;
     return [
-      { title: 'Goal', body: 'Every cell hides a target color. Fill the whole canvas to reveal the artwork. The palette shows how many cells each color still needs.' },
-      { title: 'Paint', body: `Select a swatch, then click or drag across glowing cells. Keyboard: <kbd>${b.cursorUp}</kbd> <kbd>${b.cursorLeft}</kbd> <kbd>${b.cursorDown}</kbd> <kbd>${b.cursorRight}</kbd> move the cursor, <kbd>${b.fill}</kbd> paints, number keys pick swatches. Drag only lands where the color belongs.` },
-      { title: 'Region tool', body: `Press <kbd>${b.regionTool}</kbd> or the Region button, then click a shape to flood every connected cell of that color. It only fills cells matching your selected color.` },
-      { title: 'Camera', body: `Wheel or pinch to zoom, right-drag or Pan mode to move, <kbd>${b.camReset}</kbd> to refit. On touch, two fingers pan and pinch.` },
-      { title: 'Hints & undo', body: `<kbd>${b.hint}</kbd> highlights a legal cell (small score cost). <kbd>${b.undo}</kbd> reverts your last fill where the ruleset allows it.` },
-      { title: 'Rulesets', body: 'Challenges change the contract: move limits, time limits, locked color order, or errors that count. The setup screen always shows the rules before you commit.' },
-      { title: 'Scoring', body: 'Cells ×10, rising combo bonus, region and completion bonuses, time bonus under par. Errors and hints cost points. Ties break on completion, errors, then time.' },
-      { title: 'Access', body: 'Numbers, shapes and labels reinforce color. Reduced motion, high contrast, color-vision palettes, larger text and left-handed layout live in Settings.' },
+      { title: t('Goal'), body: escapeHtml(t('Every cell hides a target color. Fill the whole canvas to reveal the artwork. The palette shows how many cells each color still needs.')) },
+      { title: t('Paint'), body: t('Select a swatch, then click or drag across glowing cells. Keyboard: {up} {left} {down} {right} move the cursor, {fill} paints, number keys pick swatches. Drag only lands where the color belongs.', { up: k(b.cursorUp), left: k(b.cursorLeft), down: k(b.cursorDown), right: k(b.cursorRight), fill: k(b.fill) }) },
+      { title: t('Region tool'), body: t('Press {key} or the Region button, then click a shape to flood every connected cell of that color. It only fills cells matching your selected color.', { key: k(b.regionTool) }) },
+      { title: t('Camera'), body: t('Wheel or pinch to zoom, right-drag or Pan mode to move, {key} to refit. On touch, two fingers pan and pinch.', { key: k(b.camReset) }) },
+      { title: t('Hints & undo'), body: t('{hint} highlights a legal cell (small score cost). {undo} reverts your last fill where the ruleset allows it.', { hint: k(b.hint), undo: k(b.undo) }) },
+      { title: t('Rulesets'), body: escapeHtml(t('Challenges change the contract: move limits, time limits, locked color order, or errors that count. The setup screen always shows the rules before you commit.')) },
+      { title: t('Scoring'), body: escapeHtml(t('Cells ×10, rising combo bonus, region and completion bonuses, time bonus under par. Errors and hints cost points. Ties break on completion, errors, then time.')) },
+      { title: t('Access'), body: escapeHtml(t('Numbers, shapes and labels reinforce color. Reduced motion, high contrast, color-vision palettes, larger text and left-handed layout live in Settings.')) },
     ];
   }
 }
@@ -1710,7 +1820,7 @@ const app = new App();
 app.boot().catch((err) => {
   console.error(err);
   const el = document.getElementById('boot-status');
-  if (el) el.textContent = `Boot failed: ${err.message}. Your save is preserved; try reloading.`;
+  if (el) el.textContent = t('Boot failed: {error}. Your save is preserved; try reloading.', { error: err.message });
 });
 window.__app = app; // debug/validation handle
 

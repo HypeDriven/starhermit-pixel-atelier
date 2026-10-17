@@ -2,6 +2,8 @@
 // mirrors. UI state is kept separate from simulation state; closing a drawer
 // can never affect a round.
 
+import { t, num, contentTitle } from './i18n.js';
+
 export const $ = (id) => document.getElementById(id);
 
 const SCREEN_IDS = ['boot', 'title', 'learn', 'journey', 'setup', 'results', 'profile', 'board', 'settings', 'help'];
@@ -155,7 +157,7 @@ export class UI {
     $('hud-progress').textContent = `${pct}%`;
     $('progress-fill').style.width = `${pct}%`;
     $('progress-bar').setAttribute('aria-valuenow', String(pct));
-    $('progress-detail').textContent = `${correct} / ${total} cells`;
+    $('progress-detail').textContent = t('{done} / {total} cells', { done: correct, total });
   }
 
   setTimer(text, visible, warn = false) {
@@ -179,7 +181,7 @@ export class UI {
   }
 
   setCombo(n) {
-    $('combo-text').textContent = n >= 4 ? `Combo ×${n}` : '';
+    $('combo-text').textContent = n >= 4 ? t('Combo ×{n}', { n }) : '';
   }
 
   setLesson(title, text) {
@@ -207,7 +209,9 @@ export class UI {
       b.setAttribute('aria-checked', String(idx === selected));
       const left = remaining?.[idx] ?? 0;
       const tot = total?.[idx] ?? 0;
-      b.setAttribute('aria-label', `Color ${idx === 0 ? 'background' : idx}, ${left} of ${tot} cells left`);
+      b.setAttribute('aria-label', idx === 0
+        ? t('Color background, {left} of {total} cells left', { left, total: tot })
+        : t('Color {n}, {left} of {total} cells left', { n: idx, left, total: tot }));
       if (left === 0 && tot > 0) b.classList.add('done');
       if (opts.lockedColor != null && idx !== opts.lockedColor) b.classList.add('locked');
       const lum = luminance(hex);
@@ -245,7 +249,7 @@ export class UI {
       const div = document.createElement('div');
       div.className = 'chapter';
       const h = document.createElement('h3');
-      h.textContent = `${ci + 1}. ${ch.name}`;
+      h.textContent = `${ci + 1}. ${t(ch.name)}`;
       div.appendChild(h);
       const row = document.createElement('div');
       row.className = 'stage-row';
@@ -258,8 +262,8 @@ export class UI {
         b.disabled = !isUnlocked;
         b.innerHTML = `<span class="stage-num">${s.meta.mastery ? '★' : si + 1}</span>` +
           `<span class="stage-stars">${'●'.repeat(st)}${'○'.repeat(Math.max(0, 3 - st))}</span>` +
-          `<span class="stage-name">${escapeHtml(s.meta.title)}</span>`;
-        b.setAttribute('aria-label', `${s.meta.title}, ${st} of 3 stars${isUnlocked ? '' : ', locked'}`);
+          `<span class="stage-name">${escapeHtml(contentTitle(s.meta.title))}</span>`;
+        b.setAttribute('aria-label', t(isUnlocked ? '{title}, {n} of 3 stars' : '{title}, {n} of 3 stars, locked', { title: contentTitle(s.meta.title), n: st }));
         if (isUnlocked) b.addEventListener('click', () => onPick(s));
         row.appendChild(b);
       });
@@ -269,7 +273,7 @@ export class UI {
       unlocked = (stars[last.id] || 0) > 0;
     });
     const done = Object.keys(save.journey.stars || {}).length;
-    $('journey-sub').textContent = `${done} / ${stages.length} stages`;
+    $('journey-sub').textContent = t('{done} / {total} stages', { done, total: stages.length });
   }
 
   renderLessons(lessons, done, onPick) {
@@ -280,20 +284,20 @@ export class UI {
       const isDone = done.includes(l.id);
       const btn = document.createElement('button');
       btn.className = 'btn';
-      btn.innerHTML = `<span class="btn-title">${i + 1}. ${escapeHtml(l.title)}${isDone ? ' ✓' : ''}</span><span class="btn-sub">${escapeHtml(l.intro)}</span>`;
+      btn.innerHTML = `<span class="btn-title">${i + 1}. ${escapeHtml(t(l.title))}${isDone ? ' ✓' : ''}</span><span class="btn-sub">${escapeHtml(t(l.intro))}</span>`;
       btn.addEventListener('click', () => onPick(l));
       li.appendChild(btn);
       list.appendChild(li);
     });
-    $('learn-sub').textContent = `${done.length} / ${lessons.length} done`;
+    $('learn-sub').textContent = t('{done} / {total} done', { done: done.length, total: lessons.length });
   }
 
   // ------------------------------------------------------------- results ---
   renderResults({ headline, stars, breakdown, progressText, achievements, boardPreview, seedText, canNext, nextLabel }) {
     $('results-headline').textContent = headline;
     $('results-stars').textContent = stars > 0 ? '★'.repeat(stars) + '☆'.repeat(Math.max(0, 3 - stars)) : '';
-    const t = $('results-table');
-    t.textContent = '';
+    const tbl = $('results-table');
+    tbl.textContent = '';
     const rows = [
       ['Cells painted', breakdown.base],
       ['Combo bonus', breakdown.comboBonus],
@@ -304,25 +308,25 @@ export class UI {
     for (const [label, val] of rows) {
       if (!val) continue;
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${label}</td><td>+${val}</td>`;
-      t.appendChild(tr);
+      tr.innerHTML = `<td>${escapeHtml(t(label))}</td><td>+${val}</td>`;
+      tbl.appendChild(tr);
     }
     if (breakdown.errorPenalty) {
       const tr = document.createElement('tr');
       tr.className = 'penalty';
-      tr.innerHTML = `<td>Error penalty (${breakdown.errors})</td><td>−${breakdown.errorPenalty}</td>`;
-      t.appendChild(tr);
+      tr.innerHTML = `<td>${escapeHtml(t('Error penalty ({n})', { n: breakdown.errors }))}</td><td>−${breakdown.errorPenalty}</td>`;
+      tbl.appendChild(tr);
     }
     if (breakdown.hintPenalty) {
       const tr = document.createElement('tr');
       tr.className = 'penalty';
-      tr.innerHTML = `<td>Hints used</td><td>−${breakdown.hintPenalty}</td>`;
-      t.appendChild(tr);
+      tr.innerHTML = `<td>${escapeHtml(t('Hints used'))}</td><td>−${breakdown.hintPenalty}</td>`;
+      tbl.appendChild(tr);
     }
     const tr = document.createElement('tr');
     tr.className = 'total';
-    tr.innerHTML = `<td>Total</td><td>${breakdown.total}</td>`;
-    t.appendChild(tr);
+    tr.innerHTML = `<td>${escapeHtml(t('Total'))}</td><td>${breakdown.total}</td>`;
+    tbl.appendChild(tr);
     $('results-progress').textContent = progressText;
     $('results-seed').textContent = seedText;
     const ach = $('results-achievements');
@@ -330,7 +334,7 @@ export class UI {
     for (const a of achievements || []) {
       const b = document.createElement('span');
       b.className = 'ach-badge';
-      b.textContent = `🏅 ${a.name}`;
+      b.textContent = `🏅 ${t(a.name)}`;
       ach.appendChild(b);
     }
     const bm = $('results-board');
@@ -343,15 +347,15 @@ export class UI {
     }
     const next = $('btn-results-next');
     next.hidden = !canNext;
-    next.textContent = nextLabel || 'Next';
+    next.textContent = nextLabel || t('Next');
   }
 
   // ------------------------------------------------------------- profile ---
   renderProfile(save, achMeta, hosted, syncStatus = 'offline') {
     $('profile-name').value = save.profile.name;
     $('profile-identity').textContent = hosted
-      ? 'Signed in through the host shell. Progress syncs to the cloud.'
-      : 'Guest profile — progress is stored on this device.';
+      ? t('Signed in through the host shell. Progress syncs to the cloud.')
+      : t('Guest profile — progress is stored on this device.');
     this._syncHosted = hosted;
     this.setSyncStatus(syncStatus);
     const s = save.stats;
@@ -359,13 +363,13 @@ export class UI {
     dl.textContent = '';
     const mins = Math.round(s.playtimeMs / 60000);
     for (const [k, v] of [
-      ['Cells painted', s.cellsFilled.toLocaleString()],
+      ['Cells painted', num(s.cellsFilled)],
       ['Rounds completed', s.roundsCompleted],
       ['Sessions', s.sessions],
-      ['Playtime', mins >= 1 ? `${mins} min` : '<1 min'],
-      ['Daily streak', `${save.daily.streak} day${save.daily.streak === 1 ? '' : 's'}`],
+      ['Playtime', mins >= 1 ? t('{n} min', { n: mins }) : t('<1 min')],
+      ['Daily streak', t(save.daily.streak === 1 ? '{n} day' : '{n} days', { n: save.daily.streak })],
     ]) {
-      const dt = document.createElement('dt'); dt.textContent = k;
+      const dt = document.createElement('dt'); dt.textContent = t(k);
       const dd = document.createElement('dd'); dd.textContent = String(v);
       dl.append(dt, dd);
     }
@@ -375,9 +379,9 @@ export class UI {
       const li = document.createElement('li');
       const at = save.achievements[a.key];
       li.className = at ? '' : 'locked';
-      li.innerHTML = `<span class="ach-key">${at ? '🏅' : '○'} ${escapeHtml(a.name)}</span>` +
-        `<span>${escapeHtml(a.desc)}</span>` +
-        (at ? `<span class="ach-when">${new Date(at).toLocaleDateString()}</span>` : '');
+      li.innerHTML = `<span class="ach-key">${at ? '🏅' : '○'} ${escapeHtml(t(a.name))}</span>` +
+        `<span>${escapeHtml(t(a.desc))}</span>` +
+        (at ? `<span class="ach-when">${new Date(at).toLocaleDateString(document.documentElement.lang || undefined)}</span>` : '');
       list.appendChild(li);
     }
     $('btn-cloud-sync').hidden = !hosted;
@@ -390,7 +394,7 @@ export class UI {
     const el = $('profile-sync');
     if (!el) return;
     el.textContent = this._syncHosted
-      ? ({
+      ? t({
         synced: 'Cloud save: synced.',
         saving: 'Cloud save: saving…',
         offline: 'Cloud save: offline — local copy kept.',
@@ -403,16 +407,16 @@ export class UI {
     list.textContent = '';
     if (!rivals.length) {
       const li = document.createElement('li');
-      li.innerHTML = '<span class="dim">No rivals yet — add one to compare scores locally.</span>';
+      li.innerHTML = `<span class="dim">${escapeHtml(t('No rivals yet — add one to compare scores locally.'))}</span>`;
       list.appendChild(li);
       return;
     }
     for (const r of rivals) {
       const li = document.createElement('li');
-      li.innerHTML = `<span>${escapeHtml(r.name)}</span><span class="dim">best ${r.best ?? 0}</span>`;
+      li.innerHTML = `<span>${escapeHtml(r.name)}</span><span class="dim">${escapeHtml(t('best {score}', { score: r.best ?? 0 }))}</span>`;
       const del = document.createElement('button');
       del.className = 'btn ghost';
-      del.textContent = 'Remove';
+      del.textContent = t('Remove');
       del.addEventListener('click', () => this.handlers.onRemoveRival?.(r.name));
       li.appendChild(del);
       list.appendChild(li);
@@ -425,7 +429,7 @@ export class UI {
     if (!entries.length) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = 'No scores yet — be the first.';
+      li.textContent = t('No scores yet — be the first.');
       list.appendChild(li);
     }
     // The list is an <ol>, so ranks come from the list marker — never prefix
@@ -433,7 +437,7 @@ export class UI {
     entries.slice(0, 20).forEach((e) => {
       const li = document.createElement('li');
       if (e.name === meName) li.className = 'me';
-      li.textContent = `${e.name} — ${e.score} (${Math.round(e.progressPct)}%, ${e.errors} errors, ${fmtTime(e.elapsedMs)})`;
+      li.textContent = t('{name} — {score} ({pct}%, {errors} errors, {time})', { name: e.name, score: e.score, pct: Math.round(e.progressPct), errors: e.errors, time: fmtTime(e.elapsedMs) });
       list.appendChild(li);
     });
     $('board-tab-global').setAttribute('aria-selected', String(scope === 'global'));
@@ -467,8 +471,8 @@ export class UI {
       const b = document.createElement('button');
       b.className = 'theme-swatch';
       b.style.background = `linear-gradient(135deg, ${theme.accentA}, ${theme.accentB} 60%, ${theme.bg})`;
-      b.textContent = owned ? theme.name : '🔒';
-      b.title = owned ? theme.name : `${theme.name} — ${unlockHint(theme.unlock)}`;
+      b.textContent = owned ? t(theme.name) : '🔒';
+      b.title = owned ? t(theme.name) : `${t(theme.name)} — ${unlockHint(theme.unlock)}`;
       b.setAttribute('aria-pressed', String(cosmetics.theme === theme.id));
       b.disabled = !owned;
       b.addEventListener('click', () => this.handlers.onTheme?.(theme.id));
@@ -481,13 +485,13 @@ export class UI {
     wrap.textContent = '';
     for (const action of actions) {
       const label = document.createElement('span');
-      label.textContent = action.label;
+      label.textContent = action.id.startsWith('color') ? t('Swatch {n}', { n: action.id.slice(5) }) : t(action.label);
       const key = document.createElement('button');
       key.className = 'bind-key';
       key.textContent = bindings[action.id] || action.def;
       key.addEventListener('click', () => {
         key.classList.add('listening');
-        key.textContent = 'press key…';
+        key.textContent = t('press key…');
         this._bindingCapture = (k) => {
           key.classList.remove('listening');
           onCapture(action.id, k);
@@ -531,7 +535,7 @@ export class UI {
   }
   get pauseOpen() { return !$('overlay-pause').hidden; }
 
-  confirm(text, title = 'Are you sure?') {
+  confirm(text, title = t('Are you sure?')) {
     $('confirm-h').textContent = title;
     $('confirm-text').textContent = text;
     this._lastFocus = document.activeElement;
@@ -641,10 +645,10 @@ function escapeHtml(s) {
 
 function unlockHint(unlock) {
   switch (unlock?.type) {
-    case 'journey': return `complete ${unlock.n} journey stages`;
-    case 'streak': return `reach a ${unlock.n}-day daily streak`;
-    case 'stages': return `finish ${unlock.n} stages`;
-    case 'cells': return `paint ${unlock.n.toLocaleString()} cells`;
-    default: return 'unlock through play';
+    case 'journey': return t('complete {n} journey stages', { n: unlock.n });
+    case 'streak': return t('reach a {n}-day daily streak', { n: unlock.n });
+    case 'stages': return t('finish {n} stages', { n: unlock.n });
+    case 'cells': return t('paint {n} cells', { n: num(unlock.n) });
+    default: return t('unlock through play');
   }
 }
