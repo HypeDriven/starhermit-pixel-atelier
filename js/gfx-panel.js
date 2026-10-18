@@ -11,7 +11,7 @@ const EN = {
   renderScale: 'Render scale', fromPreset: 'From preset ({tier})',
   adaptive: 'Adaptive resolution', showFps: 'Show frame rate',
   postUnavailable: 'Post-processing is unavailable on this device — rendering without it.',
-  unknownGpu: 'unknown GPU',
+  unknownGpu: 'unknown GPU', level: 'Level {n}',
   cat: {
     shadows: 'Shadows', ao: 'Ambient occlusion', bloom: 'Bloom', grade: 'Color grade', antialias: 'Anti-aliasing',
     reflections: 'Reflections', particles: 'Particles', background: 'Background motion', detail: 'Scene detail',
@@ -39,7 +39,7 @@ const ES = merge(EN, {
   renderScale: 'Escala de renderizado', fromPreset: 'Según el ajuste ({tier})',
   adaptive: 'Resolución adaptable', showFps: 'Mostrar fotogramas por segundo',
   postUnavailable: 'El posprocesado no está disponible en este dispositivo; se renderiza sin él.',
-  unknownGpu: 'GPU desconocida',
+  unknownGpu: 'GPU desconocida', level: 'Nivel {n}',
   cat: {
     shadows: 'Sombras', ao: 'Oclusión ambiental', bloom: 'Resplandor', grade: 'Corrección de color', antialias: 'Suavizado de bordes',
     reflections: 'Reflejos', particles: 'Partículas', background: 'Movimiento del fondo', detail: 'Detalle de la escena',
@@ -65,7 +65,7 @@ const STRINGS = {
     renderScale: 'Renderskalierung', fromPreset: 'Laut Voreinstellung ({tier})',
     adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
     postUnavailable: 'Nachbearbeitung ist auf diesem Gerät nicht verfügbar – es wird ohne sie gerendert.',
-    unknownGpu: 'unbekannte GPU',
+    unknownGpu: 'unbekannte GPU', level: 'Stufe {n}',
     cat: {
       shadows: 'Schatten', ao: 'Umgebungsverdeckung', bloom: 'Leuchten', grade: 'Farbkorrektur', antialias: 'Kantenglättung',
       reflections: 'Spiegelungen', particles: 'Partikel', background: 'Hintergrundbewegung', detail: 'Szenendetails',
@@ -86,7 +86,7 @@ const STRINGS = {
     renderScale: 'Escala de renderização', fromPreset: 'Da predefinição ({tier})',
     adaptive: 'Resolução adaptativa', showFps: 'Mostrar taxa de quadros',
     postUnavailable: 'O pós-processamento não está disponível neste dispositivo; renderizando sem ele.',
-    unknownGpu: 'GPU desconhecida',
+    unknownGpu: 'GPU desconhecida', level: 'Nível {n}',
     cat: {
       shadows: 'Sombras', ao: 'Oclusão ambiente', bloom: 'Brilho', grade: 'Correção de cor', antialias: 'Antisserrilhamento',
       reflections: 'Reflexos', particles: 'Partículas', background: 'Movimento do fundo', detail: 'Detalhe da cena',
@@ -106,7 +106,7 @@ const STRINGS = {
     renderScale: 'Scala di rendering', fromPreset: 'Dal preset ({tier})',
     adaptive: 'Risoluzione adattiva', showFps: 'Mostra frame rate',
     postUnavailable: 'La post-elaborazione non è disponibile su questo dispositivo: rendering senza.',
-    unknownGpu: 'GPU sconosciuta',
+    unknownGpu: 'GPU sconosciuta', level: 'Livello {n}',
     cat: {
       shadows: 'Ombre', ao: 'Occlusione ambientale', bloom: 'Bagliore', grade: 'Correzione colore', antialias: 'Antialiasing',
       reflections: 'Riflessi', particles: 'Particelle', background: 'Movimento dello sfondo', detail: 'Dettaglio scena',
@@ -127,7 +127,7 @@ const FR = merge(EN, {
   renderScale: 'Échelle de rendu', fromPreset: 'Selon le préréglage ({tier})',
   adaptive: 'Résolution adaptative', showFps: 'Afficher la fréquence d’images',
   postUnavailable: 'Le post-traitement n’est pas disponible sur cet appareil ; rendu sans post-traitement.',
-  unknownGpu: 'GPU inconnu',
+  unknownGpu: 'GPU inconnu', level: 'Niveau {n}',
   cat: {
     shadows: 'Ombres', ao: 'Occlusion ambiante', bloom: 'Halo lumineux', grade: 'Étalonnage des couleurs', antialias: 'Anticrénelage',
     reflections: 'Reflets', particles: 'Particules', background: 'Animation du décor', detail: 'Détail de la scène',
@@ -165,11 +165,12 @@ export function gfxStrings(locale) {
 
 const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
-/** Localized cost summary: "GPU · effects · W×H px". */
+/** Localized cost summary: "GPU · Level N · effects · W×H px". */
 export function summaryText(T, info) {
   const r = info.resolved;
   const parts = [
     info.gpu && info.gpu !== 'unknown GPU' ? info.gpu : T.unknownGpu,
+    info.level != null ? fmt(T.level, { n: info.level }) : null,
     r.shadows === 'off' ? T.sum.noShadows : fmt(T.sum.shadows, { n: SHADOW_MAP[r.shadows] }),
     r.ao === 'off' ? null : r.ao === 'high' ? T.sum.aoFull : T.sum.ao,
     r.bloom === 'on' ? T.sum.bloom : null,

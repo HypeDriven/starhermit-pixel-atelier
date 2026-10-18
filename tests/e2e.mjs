@@ -454,6 +454,7 @@ async function runGraphicsPass(browser, name, ctxOpts) {
     await page.selectOption('#set-tier', 'low');
     await page.waitForFunction(() => document.body.dataset.gfxPreset === 'low');
     await page.waitForFunction(() => /no shadows/.test(document.getElementById('gfx-summary').textContent));
+    if (!/ · Level 0 · /.test(await page.textContent('#gfx-summary'))) throw new Error('summary lacks the hardware level');
     await page.selectOption('#set-tier', 'high');
     await page.waitForFunction(() => document.body.dataset.gfxPreset === 'high');
     await page.waitForFunction(() => /2048² shadows/.test(document.getElementById('gfx-summary').textContent) && /bloom/.test(document.getElementById('gfx-summary').textContent));

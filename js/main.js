@@ -19,7 +19,7 @@ import { t, getLocale, onLocaleChange, contentTitle, num } from './i18n.js';
 const ps = () => platformStrings(pickPlatformLocale(getLocale()));
 import { AudioEngine } from './audio.js';
 import { UI, $, fmtTime } from './ui.js';
-import { resolve as resolveGraphics, detectPreset, withPreset, PRESETS, migrateGraphics } from './gfx.js';
+import { resolve as resolveGraphics, detectLevel, presetForLevel, withPreset, PRESETS, migrateGraphics } from './gfx.js';
 import { mountGraphicsPanel } from './gfx-panel.js';
 
 // ---------------------------------------------------------------------------
@@ -141,7 +141,14 @@ class App {
     const webgl = detectWebGL() && !force2d;
     this.gpu = webgl ? detectGpu() : '';
     const mobile = matchMedia('(pointer: coarse)').matches || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    this.gfxDetected = detectPreset(this.gpu, { mobile });
+    // StarHermit hardware level (js/gpu-level.js): renderer string + device facts (phone/tablet, cores, memory).
+    let sys = { mobile };
+    try {
+      const G = globalThis.StarHermitGpu;
+      if (G) { const d = G.detectSystem(); sys = { ...d, mobile: mobile || d.mobile }; }
+    } catch { /* defaults */ }
+    this.gpuLevel = detectLevel(this.gpu, sys);
+    this.gfxDetected = presetForLevel(this.gpuLevel);
     if (!webgl) {
       this.ui.showCompatNote(t('WebGL is unavailable — using the 2D compatibility renderer. All modes remain playable.'));
     }
@@ -207,9 +214,9 @@ class App {
     if (webgl) {
       import('./render.js').then(({ createRenderer3D }) => {
         if (this.renderer) return;
-        const g = resolveGraphics(this.store.data.settings.graphics, this.gfxDetected);
+        const g = resolveGraphics(this.store.data.settings.graphics, this.gfxDetected, this.gpuLevel);
         this.renderer = createRenderer3D(canvas3d, {
-          gpu: this.gpu, detected: this.gfxDetected, antialias: g.antialias === 'msaa',
+          gpu: this.gpu, detected: this.gfxDetected, level: this.gpuLevel, antialias: g.antialias === 'msaa',
         });
         this.renderer.onCameraChange = () => this.noteCameraMove();
         if (this.content) {
@@ -1465,7 +1472,7 @@ class App {
   }
 
   applyQuality() {
-    const g = resolveGraphics(this.store.data.settings.graphics, this.gfxDetected);
+    const g = resolveGraphics(this.store.data.settings.graphics, this.gfxDetected, this.gpuLevel);
     document.body.dataset.gfxPreset = g.preset;
     if (!this.renderer) return;
     if (this.renderer.setGraphics) this.renderer.setGraphics(this.store.data.settings.graphics);

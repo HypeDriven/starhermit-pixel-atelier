@@ -13,7 +13,7 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RNG } from './rng.js';
-import { resolve, describe, SHADOW_MAP, PARTICLE_CAP } from './gfx.js';
+import { resolve, describe, sparkCap, SHADOW_MAP } from './gfx.js';
 
 const CELL = 1;                 // world units per cell
 const H_EMPTY = 0.12;           // extrusion heights
@@ -51,6 +51,15 @@ const GradeShader = {
 // Cell material patch: per-instance glow (fill pulse / filled sheen) added as
 // emissive, and — at detailed quality — a bevel highlight on each block's top
 // edge plus a base-to-top gradient on its sides (cheap fake contact shading).
+// Run a post pass at a fraction of the frame: EffectComposer.addPass/setSize hand every pass the full
+// frame size, so the pass's own setSize applies the budget's scale (half-res bloom/GTAO below Ultra).
+function atScale(pass, k) {
+  if (!(k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
+}
+
 function patchCellMaterial(mat, uniforms) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uDetail = uniforms.uDetail;
@@ -121,7 +130,8 @@ class DraftingTableRenderer {
     this.gpu = opts.gpu || '';
     this.detected = opts.detected || 'balanced';
     this.saved = {};
-    this.q = resolve({}, this.detected);
+    this.level = opts.level;
+    this.q = resolve({}, this.detected, this.level);
     this.adaptiveScale = 1;
     this._frames = [];
     this.fps = 0;
@@ -269,10 +279,11 @@ class DraftingTableRenderer {
     const m = this.table.material;
     m.map?.dispose();
     m.roughnessMap?.dispose();
-    m.map = detailed ? makeGridTextureDetailed(t.table || '#0d1426', t.grid || '#16233f') : makeGridTexture(t.table || '#0d1426', t.grid || '#16233f');
+    const px = this.q.budget.table;
+    m.map = detailed ? makeGridTextureDetailed(t.table || '#0d1426', t.grid || '#16233f', px) : makeGridTexture(t.table || '#0d1426', t.grid || '#16233f');
     m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping;
     m.map.repeat.set(16, 16);
-    m.roughnessMap = detailed ? makeNoiseTexture() : null;
+    m.roughnessMap = detailed ? makeNoiseTexture(px / 2) : null;
     if (m.roughnessMap) {
       m.roughnessMap.wrapS = m.roughnessMap.wrapT = THREE.RepeatWrapping;
       m.roughnessMap.repeat.set(6, 6);
@@ -304,7 +315,7 @@ class DraftingTableRenderer {
 
     // Dust motes (cheap points; cosmetic only, never raycastable).
     if (q.particles === 'high') {
-      const count = 160;
+      const count = q.budget.dust;
       const pos = new Float32Array(count * 3);
       for (let i = 0; i < count; i++) {
         pos[i * 3] = rng.range(-22, 22);
@@ -357,7 +368,7 @@ class DraftingTableRenderer {
 
     // Floating pixels: small neon cubes drifting around the table's rim —
     // the "extruded pixels" motif, kept well outside the playfield.
-    const n = 44;
+    const n = q.budget.floaters;
     const cols = [t.accentA || '#22d3ee', t.accentB || '#f472b6', '#ffd166', '#3fd68f'];
     const fm = new THREE.InstancedMesh(
       new THREE.BoxGeometry(0.34, 0.34, 0.34),
@@ -438,7 +449,7 @@ class DraftingTableRenderer {
   /** Apply saved graphics settings (gfx.js shape). Live: no reload needed. */
   setGraphics(saved) {
     this.saved = { ...(saved || {}) };
-    this.q = resolve(this.saved, this.detected);
+    this.q = resolve(this.saved, this.detected, this.level);
     this.adaptiveScale = 1;
     this._frames = [];
     this._applyGraphics();
@@ -481,6 +492,7 @@ class DraftingTableRenderer {
       this.scene.environment = null;
     }
     this.cellUniforms.uDetail.value = g.detail === 'detailed' ? 1 : 0;
+    if (this.cellMesh && this._cellTier !== g.budget.material) this._makeCellMats();
     if (this.cellMesh) this.cellMesh.material = g.reflections === 'on' ? this.cellMatGloss : this.cellMat;
     this._applyTableSurface();
     this._buildProps();
@@ -504,6 +516,7 @@ class DraftingTableRenderer {
     return {
       gpu: this.gpu || 'unknown GPU',
       detected: this.detected,
+      level: this.level,
       resolved: this.q,
       pixels: px,
       summary: describe(this.q, px),
@@ -552,11 +565,11 @@ class DraftingTableRenderer {
         ao.blendIntensity = 0.75;
         ao.updateGtaoMaterial({ radius: 0.5, distanceExponent: 1.2, thickness: 1.0, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
         ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: g.ao === 'high' ? 6 : 4, rings: 2, samples: g.ao === 'high' ? 16 : 8 });
-        composer.addPass(ao);
+        composer.addPass(atScale(ao, g.budget.aoRes));
       }
       if (g.bloom === 'on') {
         // High threshold: only the neon strips, pylons and fill pulses bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.5, 0.9));
+        composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.5, 0.9), g.budget.bloomRes));
       }
       composer.addPass(new OutputPass());
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
@@ -630,13 +643,7 @@ class DraftingTableRenderer {
     this.glowAttr = new THREE.InstancedBufferAttribute(this.glow, 1);
     this.glowAttr.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aGlow', this.glowAttr);
-    this.cellMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.2 });
-    // Glossy lacquered pixels when reflections are on.
-    this.cellMatGloss = new THREE.MeshPhysicalMaterial({
-      roughness: 0.38, metalness: 0.08, clearcoat: 0.8, clearcoatRoughness: 0.22, envMapIntensity: 1.0,
-    });
-    patchCellMaterial(this.cellMat, this.cellUniforms);
-    patchCellMaterial(this.cellMatGloss, this.cellUniforms);
+    this._makeCellMats();
     const shadows = SHADOW_MAP[this.q.shadows] > 0;
     this.cellMesh = new THREE.InstancedMesh(geo, this.q.reflections === 'on' ? this.cellMatGloss : this.cellMat, w * h);
     this.cellMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -780,6 +787,25 @@ class DraftingTableRenderer {
     this.boardGroup.add(this.labels);
   }
 
+  // Cell materials for the preset's budget: Lambert on Low, Standard on Balanced, glossy clear-coated
+  // Physical on High/Ultra when reflections are on (Standard with reflections below High).
+  _makeCellMats() {
+    const tier = this.q.budget.material;
+    const old = [this.cellMat, this.cellMatGloss];
+    this._cellTier = tier;
+    this.cellMat = tier === 'lambert' ? new THREE.MeshLambertMaterial()
+      : new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.2 });
+    this.cellMatGloss = tier === 'physical' ? new THREE.MeshPhysicalMaterial({
+      roughness: 0.38, metalness: 0.08, clearcoat: 0.8, clearcoatRoughness: 0.22, envMapIntensity: 1.0,
+    }) : new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.08, envMapIntensity: 1.0 });
+    patchCellMaterial(this.cellMat, this.cellUniforms);
+    patchCellMaterial(this.cellMatGloss, this.cellUniforms);
+    if (this.cellMesh) {
+      this.cellMesh.material = this.q.reflections === 'on' ? this.cellMatGloss : this.cellMat;
+      for (const m of old) m?.dispose();
+    }
+  }
+
   _buildParticles() {
     if (this.points) {
       this.scene.remove(this.points);
@@ -787,7 +813,7 @@ class DraftingTableRenderer {
       this.points.material.dispose();
       this.points = null;
     }
-    const cap = PARTICLE_CAP[this.q.particles] || 96;
+    const cap = sparkCap(this.q);
     this.pCap = cap;
     this.pData = new Float32Array(cap * 8); // x,y,z, vx,vy,vz, life, maxLife
     this.pAlive = 0;
@@ -1307,11 +1333,13 @@ function makeGridTexture(baseHex, lineHex) {
 
 // Detailed drafting surface: finer ruled grid, brighter major lines with a soft
 // glow, and faint deterministic speckle so the table is never a flat plane.
-function makeGridTextureDetailed(baseHex, lineHex) {
+// Authored at 256 px and drawn into the preset's table budget.
+function makeGridTextureDetailed(baseHex, lineHex, px = 256) {
   const size = 256;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = size;
+  cv.width = cv.height = px;
   const ctx = cv.getContext('2d');
+  ctx.scale(px / size, px / size);
   ctx.fillStyle = baseHex;
   ctx.fillRect(0, 0, size, size);
   const rng = new RNG('table-speckle');
@@ -1349,8 +1377,7 @@ function makeGridTextureDetailed(baseHex, lineHex) {
 
 // Roughness variation (linear data): soft value noise so reflections on the
 // table break up into a satin sheen instead of a mirror.
-function makeNoiseTexture() {
-  const size = 128;
+function makeNoiseTexture(size = 128) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const ctx = cv.getContext('2d');
