@@ -198,11 +198,17 @@ export class UI {
 
   renderPalette(palette, selected, remaining, total, opts = {}) {
     const wrap = $('hud-palette');
-    wrap.textContent = '';
-    this._paletteBtns = [];
+    // Same number of colors: update the swatches in place. Replacing them
+    // between a press and its release would lose the click, and keyboard
+    // focus would drop off the swatch just chosen.
+    const reuse = this._paletteBtns.length === palette.length && this._paletteBtns.every((b) => b.parentNode === wrap);
+    if (!reuse) {
+      wrap.textContent = '';
+      this._paletteBtns = [];
+    }
     const shapes = ['●', '◆', '■', '▲', '★', '✚', '◐', '⬟'];
     palette.forEach((hex, idx) => {
-      const b = document.createElement('button');
+      const b = reuse ? this._paletteBtns[idx] : document.createElement('button');
       b.className = 'swatch';
       b.style.background = hex;
       b.setAttribute('role', 'radio');
@@ -217,6 +223,10 @@ export class UI {
       const lum = luminance(hex);
       b.style.color = lum > 0.55 ? '#101828' : '#fff';
       b.style.textShadow = lum > 0.55 ? 'none' : '0 1px 2px #000';
+      if (reuse) {
+        b.querySelector('.sw-left').textContent = String(left);
+        return;
+      }
       b.innerHTML = `<span class="sw-num">${idx === 0 ? '•' : idx}</span>` +
         `<span class="sw-shape">${shapes[idx % shapes.length]}</span>` +
         `<span class="sw-left">${left}</span>`;
