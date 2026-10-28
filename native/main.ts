@@ -31,7 +31,7 @@ import {
   type Lesson, type Session, type Snapshot,
 } from "./game.ts";
 import * as audio from "./audio.ts";
-import { S, T, contentTitle, fmtTime } from "./i18n.ts";
+import { N, S, T, contentTitle, fmtTime } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import { lookFor } from "./quality.ts";
 import * as render from "./render.ts";
@@ -180,17 +180,17 @@ export function showSetup(mode: Mode, preset: ContentT | null): void {
   app.mode = mode;
   let s: Setup;
   if (mode === "journey" && preset) {
-    s = { mode, title: contentTitle(preset.meta.title), rows: summaryRows(preset), note: preset.meta.mastery ? "Mastery table — combined mechanics." : "Journey stage.", startLabel: "Start", content: preset };
+    s = { mode, title: contentTitle(preset.meta.title), rows: summaryRows(preset), note: preset.meta.mastery ? "Mastery table — combined mechanics." : "Journey stage.", startLabel: N("Start"), content: preset };
   } else if (mode === "daily") {
     const c = Content.dailyContent(platform.utcDate());
-    s = { mode, title: "Daily Table", rows: summaryRows(c), note: "One shared seed per UTC day.", startLabel: "Start daily", content: c, countdown: true };
+    s = { mode, title: N("Daily Table"), rows: summaryRows(c), note: N("One shared seed per UTC day."), startLabel: N("Start daily"), content: c, countdown: true };
   } else if (mode === "practice") {
-    s = { mode, title: "Practice", rows: [], note: "Unranked. Restart and undo freely — nothing here affects ratings.", startLabel: "Start", content: null };
+    s = { mode, title: N("Practice"), rows: [], note: N("Unranked. Restart and undo freely — nothing here affects ratings."), startLabel: N("Start"), content: null };
   } else if (mode === "challenge") {
-    s = { mode, title: "Challenge", rows: [], note: "", startLabel: "Start", content: null };
+    s = { mode, title: N("Challenge"), rows: [], note: "", startLabel: N("Start"), content: null };
   } else {
     const c = Content.scoreChaseContent(platform.isoWeek());
-    s = { mode, title: "Score Chase", rows: summaryRows(c), note: "Same seed for everyone this week. Highest validated total wins.", startLabel: "Start chase", content: c };
+    s = { mode, title: N("Score Chase"), rows: summaryRows(c), note: N("Same seed for everyone this week. Highest validated total wins."), startLabel: N("Start chase"), content: c };
   }
   app.setup = s;
   openScreen("setup");
@@ -201,17 +201,17 @@ function summaryRows(content: ContentT): SetupRow[] {
   const r = content.ruleset;
   const assist = platform.options.timingAssist;
   const rows: SetupRow[] = [
-    { k: "Canvas", v: T("{w}×{h} · {n} colors", { w: content.width, h: content.height, n: content.palette.length }) },
-    { k: "Difficulty", v: "★".repeat(Content.difficultyOf(content)) },
-    { k: "Expected", v: fmtTime(content.par.timeMs) },
-    { k: "Ranked", v: content.meta.ranked ? T("Yes — validated board") : T("No") },
+    { k: N("Canvas"), v: T("{w}×{h} · {n} colors", { w: content.width, h: content.height, n: content.palette.length }) },
+    { k: N("Difficulty"), v: "★".repeat(Content.difficultyOf(content)) },
+    { k: N("Expected"), v: fmtTime(content.par.timeMs) },
+    { k: N("Ranked"), v: content.meta.ranked ? T("Yes — validated board") : T("No") },
   ];
-  if (r.moveLimit != null) rows.push({ k: "Move limit", v: T("{n} actions", { n: r.moveLimit }) });
-  if (r.timeLimitMs != null) rows.push({ k: "Time limit", v: fmtTime(assist ? r.timeLimitMs * 1.5 : r.timeLimitMs) + (assist ? " " + T("(assist)") : "") });
-  if (!r.errorPrevention) rows.push({ k: "Errors", v: r.errorLimit ? T("Count against you · fail at {n}", { n: r.errorLimit }) : T("Count against you") });
-  if (!r.tools.region) rows.push({ k: "Tools", v: T("Region tool disabled") });
-  if (r.sequence) rows.push({ k: "Order", v: T("Colors unlock in sequence") });
-  rows.push({ k: "Seed", v: content.seed });
+  if (r.moveLimit != null) rows.push({ k: N("Move limit"), v: T("{n} actions", { n: r.moveLimit }) });
+  if (r.timeLimitMs != null) rows.push({ k: N("Time limit"), v: fmtTime(assist ? r.timeLimitMs * 1.5 : r.timeLimitMs) + (assist ? " " + T("(assist)") : "") });
+  if (!r.errorPrevention) rows.push({ k: N("Errors"), v: r.errorLimit ? T("Count against you · fail at {n}", { n: r.errorLimit }) : T("Count against you") });
+  if (!r.tools.region) rows.push({ k: N("Tools"), v: T("Region tool disabled") });
+  if (r.sequence) rows.push({ k: N("Order"), v: T("Colors unlock in sequence") });
+  rows.push({ k: N("Seed"), v: content.seed });
   return rows;
 }
 export function setupRows(): SetupRow[] { return app.setup?.content ? summaryRows(app.setup.content) : []; }
@@ -421,13 +421,13 @@ function onTerminal(ev: GameEvent): void {
     board = { rank: r.rank, total: r.total, ranked: !!content.meta.ranked };
   }
   app.lastBoardId = boardId;
-  let canNext = false, nextLabel = "Next";
+  let canNext = false, nextLabel = N("Next");
   if (app.mode === "journey" && complete) {
     const idx = Content.JOURNEY.findIndex((x) => x.id === content.id);
-    if (idx >= 0 && idx + 1 < Content.JOURNEY.length) { canNext = true; nextLabel = "Next stage"; }
+    if (idx >= 0 && idx + 1 < Content.JOURNEY.length) { canNext = true; nextLabel = N("Next stage"); }
   } else if (app.mode === "learn") {
     const idx = Content.LESSONS.findIndex((l) => l.id === content.id);
-    if (idx >= 0 && idx + 1 < Content.LESSONS.length) { canNext = true; nextLabel = "Next lesson"; }
+    if (idx >= 0 && idx + 1 < Content.LESSONS.length) { canNext = true; nextLabel = N("Next lesson"); }
   }
   const results: Results = {
     reason: ev.reason ?? "", status: ev.status ?? "", final, stars: app.mode === "journey" ? Progress.starsFor(state) : 0,
@@ -694,7 +694,7 @@ function moveCursor(dx: number, dy: number): void {
   render.setKeyboardCursor(app.keyboardCell);
   const target = s.targets[app.keyboardCell]!;
   const args = { x: (app.keyboardCell % s.w) + 1, y: Math.floor(app.keyboardCell / s.w) + 1, color: target === 0 ? T("background") : target };
-  announce(T(s.filled[app.keyboardCell] ? "Cell {x}, {y} — wants color {color}, filled" : "Cell {x}, {y} — wants color {color}", args));
+  announce(s.filled[app.keyboardCell] ? T("Cell {x}, {y} — wants color {color}, filled", args) : T("Cell {x}, {y} — wants color {color}", args));
 }
 
 // ------------------------------------------------------------------ keys and pads (main.js onKeyDown, pollGamepad)
@@ -948,10 +948,10 @@ export function setBoardScope(scope: "global" | "friends"): void {
   b.entries = null;
   if (platform.signedIn()) {
     platform.hostedBoard(scope === "friends").then((entries) => {
-      if (entries) show(entries, "Global board (read-only).", true);
-      else show(local, "No platform board for this game — local records only.");
-    }, () => show(local, "Offline — showing local (casual) board."));
-  } else show(local, "Local board — casual, unvalidated.");
+      if (entries) show(entries, N("Global board (read-only)."), true);
+      else show(local, N("No platform board for this game — local records only."));
+    }, () => show(local, N("Offline — showing local (casual) board.")));
+  } else show(local, N("Local board — casual, unvalidated."));
 }
 export function signIn(): void { void requestSignIn().catch(() => undefined); }
 export function copyInvite(): void {

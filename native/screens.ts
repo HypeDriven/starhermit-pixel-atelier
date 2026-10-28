@@ -285,7 +285,7 @@ function journeyScreen(w: number): void {
         const st = stars[s.id] ?? 0;
         const open = unlocked && (si === 0 || (stars[list[si - 1]!.id] ?? 0) > 0);
         const title = contentTitle(s.meta.title);
-        const res = ui.id(`stage-${s.id}`).widget(T(open ? "{title}, {n} of 3 stars" : "{title}, {n} of 3 stars, locked", { title, n: st }), {
+        const res = ui.id(`stage-${s.id}`).widget((open ? T("{title}, {n} of 3 stars", { title, n: st }) : T("{title}, {n} of 3 stars, locked", { title, n: st })), {
           role: "button", size: { width: cw, height: cw }, style: s.meta.mastery ? "cell-mastery" : "cell-btn", disabled: !open,
           draw: (r, ws) => {
             const k = ws.scale, cx = r.x + r.width / 2;
@@ -378,7 +378,7 @@ function resultsScreen(w: number): void {
   para(RESULT_REASONS[r.reason] ? T(RESULT_REASONS[r.reason]!) : r.status, w, "headline", "results-headline");
   if (r.stars > 0) para("★".repeat(r.stars) + "☆".repeat(Math.max(0, 3 - r.stars)), w, "stars", "results-stars");
   const rows: [string, string, string][] = [];
-  for (const [k, v] of [["Cells painted", f.base], ["Combo bonus", f.comboBonus], ["Region bonus", f.regionBonus], ["Completion bonus", f.completionBonus], ["Time bonus", f.timeBonus]] as const) {
+  for (const [k, v] of [[N("Cells painted"), f.base], [N("Combo bonus"), f.comboBonus], [N("Region bonus"), f.regionBonus], [N("Completion bonus"), f.completionBonus], [N("Time bonus"), f.timeBonus]] as const) {
     if (v) rows.push([T(k), `+${v}`, "td-num"]);
   }
   if (f.errorPenalty) rows.push([T("Error penalty ({n})", { n: f.errors }), `−${f.errorPenalty}`, "td-pen"]);
@@ -450,15 +450,15 @@ function profileScreen(w: number, L: Layout): void {
     para(platform.signedIn() ? T("Signed in through the host shell. Progress syncs to the cloud.") : T("Guest profile — progress is stored on this device."), colW, "dim", "profile-identity");
     if (platform.signedIn()) {
       const st = platform.syncState();
-      para(T(st === "synced" ? "Cloud save: synced." : st === "saving" ? "Cloud save: saving…" : "Cloud save: offline — local copy kept."), colW, "fine", "profile-sync");
+      para(st === "synced" ? T("Cloud save: synced.") : st === "saving" ? T("Cloud save: saving…") : T("Cloud save: offline — local copy kept."), colW, "fine", "profile-sync");
     }
     const mins = Math.round(d.stats.playtimeMs / 60000);
     dl("profile-stats", [
-      { k: "Cells painted", v: num(d.stats.cellsFilled) },
-      { k: "Rounds completed", v: String(d.stats.roundsCompleted) },
-      { k: "Sessions", v: String(d.stats.sessions) },
-      { k: "Playtime", v: mins >= 1 ? T("{n} min", { n: mins }) : T("<1 min") },
-      { k: "Daily streak", v: T(d.daily.streak === 1 ? "{n} day" : "{n} days", { n: d.daily.streak }) },
+      { k: N("Cells painted"), v: num(d.stats.cellsFilled) },
+      { k: N("Rounds completed"), v: String(d.stats.roundsCompleted) },
+      { k: N("Sessions"), v: String(d.stats.sessions) },
+      { k: N("Playtime"), v: mins >= 1 ? T("{n} min", { n: mins }) : T("<1 min") },
+      { k: N("Daily streak"), v: (d.daily.streak === 1 ? T("{n} day", { n: d.daily.streak }) : T("{n} days", { n: d.daily.streak })) },
     ], colW);
   }, { width: colW, spacing: 8 });
   const right = (): unknown => ui.column("profile-right", () => {
