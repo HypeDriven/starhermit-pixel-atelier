@@ -1,7 +1,7 @@
 # Pixel Atelier — Specification (StarHermit engine build)
 
 **Status:** running specification of the shipped game.
-**Runtime:** StarHermit engine script game, `engine.version=1.19.2`, `engine.minor=20` (host API 1.21), entry
+**Runtime:** StarHermit engine script game, `engine.version=1.22.0`, `engine.minor=20` (host API 1.21), entry
 `native/main.ts`. Played natively by the StarHermit client and in browsers by the engine's web runtime (the loader
 `index.html` and `starhermit-files.json` written by `npm run package`).
 **Players:** one; local casual boards per canvas, the platform's Score Chase leaderboard when signed in.
