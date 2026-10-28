@@ -1,29 +1,76 @@
 name=Pixel Atelier
 description=Color numbered pixel cells with painting and fill tools to reveal vibrant pixel artwork.
-launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=score-script.js
 cover=cover.jpg
+
+# StarHermit engine script game: one package, played natively by the
+# StarHermit client and in browsers by the engine's web runtime. Browsers open
+# launch=index.html, the loader `npm run package` writes (it pins the engine
+# on wiki.starhermit.com by hash; never edit it). Re-run `npm run package`
+# after every change and commit index.html + starhermit-files.json.
+launch=index.html
+engine.api=1
+engine.entry=native/main.ts
+engine.version=1.19.2
+engine.minor=20
+engine.capabilities=platform,storage,clipboard
+
+# Keyboard controls (players rebind keys and pads in the runtime's Options).
+# The board is also painted with the pointer or a finger: press or drag
+# across cells with the brush, press a shape with the region tool; the wheel
+# or a pinch zooms, right-drag, two fingers or Pan mode move the camera.
+engine.group.fill=Painting
 control.fill=Enter+NumpadEnter | Paint / confirm
-control.cancel=Escape | Cancel
-control.pause=KeyP | Pause
+control.cursor_up=ArrowUp+KeyW | Cursor up
+control.cursor_down=ArrowDown+KeyS | Cursor down
+control.cursor_left=ArrowLeft+KeyA | Cursor left
+control.cursor_right=ArrowRight+KeyD | Cursor right
+control.next_color=KeyE | Next color
+control.prev_color=KeyQ | Previous color
+control.region_tool=KeyR | Region tool
+control.brush_tool=KeyB | Brush tool
 control.undo=KeyU | Undo
 control.hint=KeyH | Hint
-control.nextColor=KeyE | Next color
-control.prevColor=KeyQ | Previous color
-control.regionTool=KeyR | Region tool
-control.brushTool=KeyB | Brush tool
-control.camReset=KeyC | Reset camera
-control.cursorUp=ArrowUp+KeyW | Cursor up
-control.cursorDown=ArrowDown+KeyS | Cursor down
-control.cursorLeft=ArrowLeft+KeyA | Cursor left
-control.cursorRight=ArrowRight+KeyD | Cursor right
-control.color0=Digit0+Numpad0 | Swatch 0 (background)
-control.color1=Digit1+Numpad1 | Swatch 1
-control.color2=Digit2+Numpad2 | Swatch 2
-control.color3=Digit3+Numpad3 | Swatch 3
-control.color4=Digit4+Numpad4 | Swatch 4
-control.color5=Digit5+Numpad5 | Swatch 5
-control.color6=Digit6+Numpad6 | Swatch 6
-control.color7=Digit7+Numpad7 | Swatch 7
-control.color8=Digit8+Numpad8 | Swatch 8
+engine.group.color_0=Swatches
+control.color_0=Digit0+Numpad0 | Swatch 0 (background)
+control.color_1=Digit1+Numpad1 | Swatch 1
+control.color_2=Digit2+Numpad2 | Swatch 2
+control.color_3=Digit3+Numpad3 | Swatch 3
+control.color_4=Digit4+Numpad4 | Swatch 4
+control.color_5=Digit5+Numpad5 | Swatch 5
+control.color_6=Digit6+Numpad6 | Swatch 6
+control.color_7=Digit7+Numpad7 | Swatch 7
+control.color_8=Digit8+Numpad8 | Swatch 8
+engine.group.cam_reset=Camera
+control.cam_reset=KeyC | Reset camera
+control.zoom_in=Equal+NumpadAdd | Zoom in
+control.zoom_out=Minus+NumpadSubtract | Zoom out
+control.pan_up=KeyI | Pan up
+control.pan_down=KeyK | Pan down
+control.pan_left=KeyJ | Pan left
+control.pan_right=KeyL | Pan right
+engine.group.pause=Round
+control.pause=KeyP | Pause
+control.cancel=Escape | Cancel
+
+# Gamepad (the browser build's pollGamepad): the D-pad moves the cursor, South
+# paints, East pauses, West undoes, North hints, the shoulders cycle colors,
+# the triggers zoom, the left stick pans, Select refits the camera, Start pauses.
+engine.gamepad.fill=South
+engine.gamepad.cursor_up=DpadUp
+engine.gamepad.cursor_down=DpadDown
+engine.gamepad.cursor_left=DpadLeft
+engine.gamepad.cursor_right=DpadRight
+engine.gamepad.next_color=RightShoulder
+engine.gamepad.prev_color=LeftShoulder
+engine.gamepad.undo=West
+engine.gamepad.hint=North
+engine.gamepad.cam_reset=Select
+engine.gamepad.zoom_in=RightTrigger
+engine.gamepad.zoom_out=LeftTrigger
+engine.gamepad.pan_up=LeftStickUp
+engine.gamepad.pan_down=LeftStickDown
+engine.gamepad.pan_left=LeftStickLeft
+engine.gamepad.pan_right=LeftStickRight
+engine.gamepad.pause=Start+East
