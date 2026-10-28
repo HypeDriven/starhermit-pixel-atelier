@@ -1,0 +1,29 @@
+# A short landscape phone (844 x 390, DPR 3) by finger: Score Chase from its setup, the palette as a column beside the
+# board, a swatch and a touched cell, the left drawer, pause and leave.
+# viewport 844x390@3
+until 600 Paint the table
+frames 10
+touch =Score Chase
+until 120 Same seed for everyone this week
+frames 10
+save chase-setup-land
+touch =Start chase
+until 600 0:00
+frames 40
+touch Color 1,
+frames 10
+save chase-land
+touch =◧
+frames 15
+expect Fill every cell
+save drawer-land
+touch 50% 50%
+frames 10
+touch =Pause
+until 60 Skip animations
+frames 10
+touch =Leave round
+until 60 Progress on this canvas will be lost
+frames 10
+touch =Confirm
+until 120 Paint the table

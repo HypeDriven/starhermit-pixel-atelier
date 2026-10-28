@@ -1,0 +1,136 @@
+# The menus on a desktop (1280 x 800): how to play, the leaderboard, settings (cell numbers on, the color-vision palette),
+# the profile (a display name and a rival typed in), the lessons list, the journey map, the Practice, Challenge and Daily
+# setups, then a Practice round with its pause card, settings from the pause card, skip animations, a restart confirmed,
+# undo, a hint, the tools by click and leave confirmed.
+# viewport 1280x800@1
+until 600 Paint the table
+frames 10
+save title
+click =How to play
+until 120 Hints & undo
+frames 10
+save help
+key Escape 1
+until 120 Paint the table
+frames 10
+click =Leaderboard
+until 120 Local board — casual
+expect Score Chase — week
+frames 10
+save board
+click =Friends
+frames 10
+click =Back
+until 120 Paint the table
+frames 10
+click =Settings
+until 120 Theme (cosmetic)
+frames 10
+click =Always show cell numbers
+frames 5
+click =Cell palette
+frames 10
+click =Color-vision safe
+frames 10
+save settings
+key Escape 1
+until 120 Paint the table
+frames 10
+click =Profile
+until 120 Display name
+frames 10
+click Rival name
+frames 5
+type Ada
+frames 5
+click =Add rival
+frames 10
+expect best 0
+save profile
+key Escape 1
+until 120 Paint the table
+frames 10
+click =Learn
+until 120 Atelier Lessons
+frames 10
+save learn
+key Escape 1
+until 120 Paint the table
+frames 10
+click =Journey
+until 120 Seven chapters
+frames 10
+save journey
+key Escape 1
+until 120 Paint the table
+frames 10
+click =Challenge
+until 120 Level
+frames 10
+save challenge-setup
+key Escape 1
+until 120 Paint the table
+frames 10
+click =Daily Table
+until 120 Next table in
+frames 10
+save daily-setup
+key Escape 1
+until 120 Paint the table
+frames 10
+click =Practice
+until 120 Seed (inspectable)
+frames 10
+save practice-setup
+click =Start
+until 600 0:00
+frames 40
+save practice
+click =Hint
+frames 10
+expect Try
+key Digit1 1
+frames 5
+key ArrowRight 1
+frames 3
+key Enter 1
+frames 10
+click =Undo
+frames 10
+click =Region
+frames 5
+click =Pan
+frames 5
+click =Pan
+frames 5
+click =Zoom in
+frames 5
+click =Fit
+frames 5
+key KeyP 1
+until 60 Skip animations
+frames 10
+save pause
+click =Settings
+until 120 Theme (cosmetic)
+frames 10
+key Escape 1
+until 60 Skip animations
+frames 10
+click =Skip animations
+frames 10
+click =Restart round
+until 60 Restart this canvas
+frames 10
+save confirm
+click =Confirm
+until 600 0:00
+frames 30
+key Escape 1
+until 60 Leave round
+frames 10
+click =Leave round
+until 60 Progress on this canvas will be lost
+frames 10
+click =Confirm
+until 120 Paint the table

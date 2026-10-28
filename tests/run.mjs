@@ -12,7 +12,6 @@ import {
   lessonContent, LESSONS, JOURNEY, generateArt, getArt,
 } from '../js/content.js';
 import { Session, boardEntryFromSession, compareBoardEntries } from '../js/session.js';
-import { SaveStore, defaultSaveData, checksumOf } from '../js/storage.js';
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -400,40 +399,8 @@ section('session: boards, tie-breaks');
   ok(compareBoardEntries(a, c) < 0, 'full tie → stable session id');
 }
 
-// ---------------------------------------------------------------------------
-section('storage: checksum, migration, corruption');
-{
-  const store = new SaveStore();
-  store.update((d) => { d.stats.cellsFilled = 42; });
-  const doc = store.exportDoc();
-  eq(doc.data.stats.cellsFilled, 42, 'persisted value');
-  // Corruption → rejected by importDoc.
-  const bad = JSON.parse(JSON.stringify(doc));
-  bad.data.stats.cellsFilled = 9999;
-  let threw = false;
-  try { store.importDoc(bad); } catch { threw = true; }
-  ok(threw, 'corrupted checksum rejected');
-  // Migration fills new fields on old-shaped saves.
-  const ancient = { v: 0, rev: 1, updatedAt: 1, data: { profile: { name: 'Old' } } };
-  ancient.checksum = checksumOf({ v: ancient.v, rev: ancient.rev, updatedAt: ancient.updatedAt, data: ancient.data });
-  store.importDoc(ancient);
-  eq(store.data.profile.name, 'Old', 'old save value kept');
-  ok(store.data.settings.a11y && store.data.cosmetics.unlocked.length > 0, 'defaults merged on migrate');
-  // Revision resolution.
-  eq(SaveStore.resolveRevision(null, doc), 'remote', 'no local → remote');
-  eq(SaveStore.resolveRevision(doc, null), 'local', 'no remote → local');
-  eq(SaveStore.resolveRevision(doc, doc), 'local', 'same → local');
-  const older = { ...doc, rev: doc.rev - 1, checksum: 'x' };
-  eq(SaveStore.resolveRevision(doc, older), 'local', 'newer local wins');
-  const conflict = { ...doc, data: { ...doc.data, stats: { ...doc.data.stats, cellsFilled: 777 } }, checksum: 'different' };
-  eq(SaveStore.resolveRevision(doc, conflict), 'conflict', 'same rev diff content → conflict');
-  // Re-wrapping the same data stamps a new updatedAt (and so a new wrapper
-  // checksum); that must not read as a conflict.
-  const rewrapped = { ...doc, updatedAt: doc.updatedAt + 1000, checksum: 'stale' };
-  eq(SaveStore.resolveRevision(doc, rewrapped), 'local', 'same rev + same data → local');
-}
+// The save model (js/progress.js) is tested in tests/progress.test.mjs.
 
-// StarHermit adapter tests live in tests/platform.test.mjs.
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
