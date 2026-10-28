@@ -1,15 +1,20 @@
 {
   "name": "pixel-atelier",
   "version": "1.0.0",
-  "description": "Color indexed pixel cells on a neon drafting table to reveal animated pixel art.",
+  "description": "Pixel Atelier — color indexed pixel cells on a neon drafting table to reveal pixel art. A StarHermit engine script game.",
   "type": "module",
-  "scripts": {
-    "start": "node server.js",
-    "test": "node tests/run.mjs && node --test tests/gfx.test.mjs tests/platform.test.mjs tests/i18n.test.mjs",
-    "test:e2e": "node tests/e2e.mjs",
-    "test:hosted": "node tests/hosted-smoke.mjs"
-  },
-  "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
-  "devDependencies": { "playwright-core": "^1.62.1" }
+  "license": "SEE LICENSE IN LICENSE.md",
+  "scripts": {
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node tests/run.mjs && node --test tests/progress.test.mjs tests/i18n.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
+    "plays": "node tools/gen-plays.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  }
 }
