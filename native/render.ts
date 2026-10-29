@@ -23,7 +23,7 @@
 // order. The canvas filled the window behind the DOM shell; so does the
 // camera.
 import {
-  ACESFilmicToneMapping, AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry,
+  ACESFilmicToneMapping, OrthographicCamera, AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry,
   DirectionalLight, DoubleSide, Euler, Fog, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
   MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Plane, PMREMGenerator, PointLight, Points, PointsMaterial,
   Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, ShaderMaterial, SRGBColorSpace, TextureLoader, TorusGeometry,
@@ -180,14 +180,21 @@ scene.background = color("#05070f");
 const fog = new Fog(color("#0a1024"), 30, 95);
 scene.fog = fog;
 
-const hemi = new HemisphereLight(color("#9fd8ff"), color("#05070f"), 0.55 / Math.PI);
+const hemi = new HemisphereLight(color("#9fd8ff"), color("#05070f"), 0.55);
 scene.add(hemi);
-const key = new DirectionalLight(color("#9fd8ff"), 1.6 / Math.PI);
+const key = new DirectionalLight(color("#9fd8ff"), 1.6);
 key.position.set(8, 16, 6).normalize().multiplyScalar(24);
 key.shadow.bias = -0.0004;
-key.shadow.normalBias = 1.5;
+key.shadow.normalBias = 0.02;
 scene.add(key, key.target);
-const RIM = 60 / Math.PI;
+/** The page's key-light shadow box, fitted tightly to the board. */
+function fitShadow(): void {
+  const ext = Math.max(W || 12, H || 12) * CELL * 0.5 + 1.5;
+  const sc = key.shadow.camera as OrthographicCamera;
+  sc.left = -ext * 1.25; sc.right = ext * 1.25; sc.top = ext * 1.25; sc.bottom = -ext * 1.25; sc.near = 1; sc.far = 50;
+  sc.updateProjectionMatrix();
+}
+const RIM = 60;
 const rim = new PointLight(color("#ff7ad9"), RIM, 60, 2);
 rim.position.set(-10, 6, -8);
 scene.add(rim);
@@ -228,6 +235,7 @@ let cellLabels = false;
 let content: Content | null = null;
 let palette: string[] = [];
 let W = 12, H = 12;
+fitShadow();
 interface CellView { h: number; targetH: number; v: number; flash: number; filled: boolean; wrong: number; delay: number }
 let cells: CellView[] = [];
 let ghostCells = new Set<number>();
@@ -551,6 +559,7 @@ export function setBoard(c: Content, pal: string[]): void {
   palette = pal;
 
   W = c.width; H = c.height;
+  fitShadow();
   cells = [];
   for (let i = 0; i < W * H; i++) cells.push({ h: 0, targetH: H_EMPTY, v: 0, flash: 0, filled: false, wrong: 0, delay: 0 });
   ghostCells = new Set();
@@ -963,7 +972,5 @@ export function update(dtSec: number, w: number, h: number): void {
   const elev = 0.76;
   camera.position.set(cam.x + sx, cam.d * Math.sin(elev), cam.z + cam.d * Math.cos(elev) * 0.55 + sy);
   camera.lookAt(cam.x, 0, cam.z);
-  // the shadow reaches the board from wherever the camera is
-  key.shadow.distance = cam.d * 1.6 + Math.max(W, H);
   refreshLabels();
 }
