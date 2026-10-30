@@ -485,7 +485,8 @@ export function applyLook(next: Look): void {
   buildParticles();
   applyGlow();
   // UnrealBloomPass(0.6, 0.5, 0.9): only the neon strips, pylons and fill pulses bloom.
-  renderer.bloom = next.bloom ? { strength: 0.6, radius: 0.5, threshold: 0.9, resolution: next.budget.bloomRes } : null;
+  // three r170 page: UnrealBloomPass 0.6 squared (0.36) for the engine's r185 bloom (engine.minor 29).
+  renderer.bloom = next.bloom ? { strength: 0.36, radius: 0.5, threshold: 0.9, resolution: next.budget.bloomRes } : null;
   // GTAOPass: radius 0.5, distance exponent 1.2, thickness 1, 16 / 8 samples and the denoise per tier, blend 0.75.
   renderer.ao = next.ao === "off" ? null : {
     blendIntensity: 0.75, radius: 0.5, distanceExponent: 1.2, thickness: 1, scale: 1, samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
