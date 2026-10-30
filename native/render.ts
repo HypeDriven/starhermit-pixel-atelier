@@ -485,18 +485,18 @@ export function applyLook(next: Look): void {
   buildParticles();
   applyGlow();
   // UnrealBloomPass(0.6, 0.5, 0.9): only the neon strips, pylons and fill pulses bloom.
-  // three r170 page: UnrealBloomPass 0.6 squared (0.36) for the engine's r185 bloom (engine.minor 29).
-  renderer.bloom = next.bloom ? { strength: 0.36, radius: 0.5, threshold: 0.9, resolution: next.budget.bloomRes } : null;
+  // three r170 page: bloom model "r176" with the page's strength 0.6 (engine.minor 30).
+  renderer.bloom = next.bloom ? { model: "r176", strength: 0.6, radius: 0.5, threshold: 0.9, resolution: next.budget.bloomRes } : null;
   // GTAOPass: radius 0.5, distance exponent 1.2, thickness 1, 16 / 8 samples and the denoise per tier, blend 0.75.
   renderer.ao = next.ao === "off" ? null : {
     blendIntensity: 0.75, radius: 0.5, distanceExponent: 1.2, thickness: 1, scale: 1, samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
     denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
   };
   // GradeShader after the OutputPass (display space): a 0.22 S-curve, saturation 1.12, cool shadows / warm highlights over
-  // luma 0.2 → 0.8, blacks lifted (×0.975 + 0.018 is left out: the runtime's display grade has no offset), a 0.26 vignette
+  // luma 0.2 → 0.8, blacks lifted (×0.975 + 0.018 as levels), a 0.26 vignette
   // from 0.38 to 0.9 with x scaled 1.1.
   renderer.grade = next.grade ? {
-    space: "display", contrast: 0.11, saturation: 1.12, split: [0.2, 0.8], shadows: [0.95, 0.98, 1.06], highlights: [1.04, 1.0, 0.97],
+    space: "display", contrastCurve: "s", contrast: 0.22, saturation: 1.12, levels: [0.975, 0.018], split: [0.2, 0.8], shadows: [0.95, 0.98, 1.06], highlights: [1.04, 1.0, 0.97],
     vignette: { amount: 0.26, inner: 0.38, outer: 0.9, scale: [1.1, 1] },
   } : null;
   renderer.antialias = next.antialias;
