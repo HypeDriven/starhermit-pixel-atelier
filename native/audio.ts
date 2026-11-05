@@ -14,8 +14,9 @@
 // live synthesis graph makes clip loads fail on the web runtime): a clip
 // still loading is silent. Captions (a game option) and haptics still run
 // when the runtime mutes the sound, as before. The runtime's Options own the
-// volumes, the mute and the voice limit. Clips load once the mixer runs
-// (natively at once, in a browser after the first press), one at a time.
+// volumes, the mute and the voice limit. Clips all load at once in onStart;
+// the music and the ambience wait for the mixer (natively at once, in a browser
+// after the first press).
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 import { vibrate } from "starhermit:input";
 import { RNG } from "./game.ts";
@@ -28,9 +29,6 @@ const SAMPLES: Record<string, string> = {
   "lesson.step": "lesson-step", complete: "complete-fanfare", failed: "failed-fall",
 };
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let wantClips = false;
 let suspended = false;
 /** Captions for audio cues (main.ts shows them when the option is on). */
 export let onCaption: ((text: string) => void) | null = null;
@@ -39,15 +37,21 @@ export let hapticsEnabled = true;
 export function setHaptics(on: boolean): void { hapticsEnabled = on; }
 function haptic(ms: number): void { if (hapticsEnabled) { try { vibrate(ms); } catch { /* no motor */ } } }
 
-/** Asks for the clips; they load once the mixer runs (see update). */
-export function loadSfx(): void { wantClips = true; }
+/** Loads every clip at once (onStart); a cue whose clip is still loading is skipped. */
+export function loadSfx(): void {
+  for (const name of new Set(Object.values(SAMPLES))) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => {
+      console.warn(`sfx ${name}: ${e instanceof Error ? e.message : String(e)}`);
+    });
+  }
+}
 
 /** audio.js play(event, { tier, combo }): the sample, then its caption and haptics. */
 export function play(event: string, opts: { tier?: number; combo?: number } = {}): void {
   const name = SAMPLES[event];
   const clip = name ? clips.get(name) : undefined;
   if (clip && !suspended) {
-    try { playClip(clip, { bus: "effects" }); } catch { clips.delete(name!); if (!queue.includes(name!)) queue.push(name!); }
+    try { playClip(clip, { bus: "effects" }); } catch { /* the mixer is full this frame: skip it */ }
   }
   if (event === "error") { onCaption?.("That cell does not take this color."); haptic(70); }
   else if (event === "combo") { if (Math.min(4, opts.tier ?? 1) >= 3) onCaption?.(`Combo ${opts.combo ?? ""}`.trim()); }
@@ -163,25 +167,9 @@ export function setSuspended(on: boolean): void {
   } catch { /* gone */ }
 }
 
-/** Each frame: the clips once the mixer runs (one at a time), then the music and the ambience. */
+/** Each frame, once the mixer runs: the music and the ambience. */
 export function update(): void {
   if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    for (const n of Object.values(SAMPLES)) if (!queue.includes(n)) queue.push(n);
-  }
-  if (!loading && queue.length) {
-    const name = queue.shift()!;
-    if (!clips.has(name)) {
-      loading = true;
-      loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => {
-        console.warn(`sfx ${name}: ${e instanceof Error ? e.message : String(e)}`);
-        loading = false;
-      });
-    }
-    return;
-  }
-  if (loading) return;
   if (musicSeed && (!padClip || !pluckClip)) {
     if (!renderMusic()) return;
     try { padClip = createClip([padBuf], RATE); pluckClip = createClip([pluckBuf], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); musicSeed = ""; }

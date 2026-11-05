@@ -1,0 +1,52 @@
+# Bench scene: Journey stage 1 on the 3D table, the keyboard cursor painting its first cells (not finished, so it stays on the table). Written for tools/engine-tier-bench.mjs.
+until 600 Paint the table
+frames 10
+click =Play
+until 120 Journey stage
+frames 10
+click =Start
+until 600 0:00
+frames 120
+measure start
+frames 30
+key KeyR 1
+frames 3
+key Digit0 1
+frames 2
+key ArrowRight 1
+frames 1
+key Enter 1
+frames 3
+key Digit1 1
+frames 2
+key ArrowRight 1
+frames 1
+key ArrowRight 1
+frames 1
+key ArrowRight 1
+frames 1
+key ArrowRight 1
+frames 1
+key ArrowRight 1
+frames 1
+key ArrowRight 1
+frames 1
+key ArrowDown 1
+frames 1
+key ArrowDown 1
+frames 1
+key ArrowDown 1
+frames 1
+key ArrowDown 1
+frames 1
+key ArrowDown 1
+frames 1
+key ArrowDown 1
+frames 1
+key Enter 1
+frames 3
+key Digit1 1
+frames 2
+key ArrowLeft 1
+frames 500
+measure stop

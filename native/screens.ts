@@ -71,6 +71,11 @@ function button(b: Btn): void {
 }
 /** Buttons in rows that wrap at `width` (flex-wrap), optionally stretched across each row. */
 function flow(label: string, list: Btn[], width: number, gap = 8, stretch = false, justify: "start" | "center" = "start"): void {
+  // Stretched rows fill the width, so they keep the packer (the engine's wrap row doesn't stretch its lines).
+  if (!stretch) {
+    ui.row(label, () => { for (const b of list) button(b); }, { wrap: true, width, gap, justify, align: "center" });
+    return;
+  }
   const rows: Btn[][] = [[]];
   let used = 0;
   const bw = (b: Btn): number => Math.min(width, b.width ?? buttonWidth(b.text, b.style ?? "btn"));
@@ -82,11 +87,9 @@ function flow(label: string, list: Btn[], width: number, gap = 8, stretch = fals
   }
   ui.column(label, () => {
     rows.forEach((row, ri) => ui.row(`${label}-r${ri}`, () => {
-      if (stretch) {
-        const total = row.reduce((n, b) => n + bw(b), 0);
-        const extra = (width - total - gap * (row.length - 1)) / row.length;
-        for (const b of row) button({ ...b, width: bw(b) + extra });
-      } else for (const b of row) button(b);
+      const total = row.reduce((n, b) => n + bw(b), 0);
+      const extra = (width - total - gap * (row.length - 1)) / row.length;
+      for (const b of row) button({ ...b, width: bw(b) + extra });
     }, { spacing: gap, width, justify, align: "center" }));
   }, { spacing: gap, width });
 }

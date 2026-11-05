@@ -120,14 +120,14 @@ Actions are declared in `starhermit.txt` (players rebind keys and pads in the ru
 - `starhermit:scene`: perspective camera (FOV 32°) over the table at a 0.76 rad elevation, a critically damped spring
   for pan / zoom / refit, a low shake on errors and completion. Lights from three.js r170 ÷ π (hemisphere 0.55, key
   1.6, pink rim point light 60). ACES tone mapping at 1.12, fog 30–95.
-- Per quality tier (`frame().quality`, budgets scaled up to 2× by `frame().levelIndex`):
+- The engine's level (`levelSettings()`) sets the shadow map, AO, bloom, grade and anti-aliasing. Art per quality tier (`frame().quality`, sparks and dust scaled up to 2× by the level's particle budget, the table texture held to the level's maximum):
 
-  | Tier | Shadows | AO | Bloom | Grade | AA | Reflections | Cells | Extras |
-  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-  | Low | off | off | off | off | MSAA | off | Lambert | plain grid, ≤ 96 sparks |
-  | Balanced | 1024 | off | on | on | FXAA | on | Standard | detailed table, pylons, ring, 32 floaters, dust |
-  | High | 2048 | on | on | on | SMAA | on | clear-coated Physical | 44 floaters |
-  | Ultra | 4096 | high | on | on | MSAA | on | clear-coated Physical | 72 floaters, full-res bloom/AO |
+  | Tier | Reflections | Cells | Extras |
+  | --- | --- | --- | --- |
+  | Low | off | Lambert | plain grid, ≤ 96 sparks |
+  | Balanced | on | Standard | detailed table, pylons, ring, 32 floaters, dust |
+  | High | on | clear-coated Physical | 44 floaters |
+  | Ultra | on | clear-coated Physical | 72 floaters |
 
   Bloom 0.6 / 0.5 / threshold 0.9 (only the neon strips, frame, pylon tips and fill pulses exceed 1); GTAO radius 0.5;
   the display-space grade (S-curve, saturation 1.12, cool shadows / warm highlights, 0.26 vignette); the room
