@@ -134,7 +134,7 @@ Actions are declared in `starhermit.txt` (players rebind keys and pads in the ru
   environment at 0.22.
 - `starhermit:ui` styles come from `tools/ui-style.css` → `assets/ui-style.json` (`npm run css`).
 - `starhermit:audio`: the 17 authored one-shots in `sfx/`; the theme's ambience (filtered noise with an LFO, 20 s loop)
-  and the seeded pad music (8 chords) rendered into clips at start, looped on the music bus; the pluck layer fades in
+  and the seeded pad music (8 chords) rendered offline into clips, looped on the music bus; the pluck layer fades in
   past 35 % progress at the progress level.
 
 ## 6. Platform integration
@@ -149,13 +149,13 @@ Actions are declared in `starhermit.txt` (players rebind keys and pads in the ru
   (a practice session; the script range-checks it onto the `high-score` board) and shows the rank. Other modes stay on
   the local casual boards, as before.
 - Invite link (copied to the clipboard), sign-in, sign-out notice, the platform clock for Daily and the week.
-- Language from `preferences().language` over js/strings.js (nine locales); account strings in js/platform-i18n.js.
+- Language: the engine's `strings` over assets/strings.json (nine locales); account lines are its `starhermit.*`.
 
 ## 7. Files
 
 - `native/`: main.ts (state machine, rounds, input, clock), screens.ts (UI), render.ts (scene), audio.ts, platform.ts,
   quality.ts, style.ts, i18n.ts, game.ts (typed facade).
-- `js/`: rules.js, content.js, session.js, rng.js, progress.js, i18n.js, strings.js, platform-i18n.js.
+- `js/`: rules.js, content.js, session.js, rng.js, progress.js, i18n.js (canvas titles).
 - `assets/`: ui-style.json, table-rough.png (`tools/bake-rough.mjs`). `sfx/`: the one-shots.
 - `score-script.js`: the leaderboard script (server=).
 

@@ -22,7 +22,7 @@
 // and the countdown, the results delay, toasts, captions, the hint highlight,
 // the replay and the autosave run on the same clock, so slow frames never
 // change a round and play scripts replay exactly.
-import { clipboard, frame, levelSettings, onFixedUpdate, onPreferencesChange, onRender, onResume, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
+import { clipboard, createTimers, frame, levelSettings, onFixedUpdate, onPreferencesChange, onRender, onResume, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
 import { onAction, onPointerButton, onPointerMove, onTouch, onWheel } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { onSessionEnded, requestSignIn } from "starhermit:platform";
@@ -103,9 +103,15 @@ export const now = (): number => clockMs;
 export const fresh = (): boolean => frame().frame !== app.openedFrame;
 
 // ------------------------------------------------------------------ timers on the clock
-const timers: { at: number; fn: () => void; tag: string }[] = [];
-function after(ms: number, fn: () => void, tag = ""): void { timers.push({ at: clockMs + ms, fn, tag }); }
-function cancel(tag: string): void { for (let i = timers.length - 1; i >= 0; i--) if (timers[i]!.tag === tag) timers.splice(i, 1); }
+const timers = createTimers();
+const tagged = new Map<string, number[]>();
+function after(ms: number, fn: () => void, tag = ""): void {
+  const id = timers.after(ms / 1000, fn);
+  if (!tag) return;
+  const ids = tagged.get(tag);
+  if (ids) ids.push(id); else tagged.set(tag, [id]);
+}
+function cancel(tag: string): void { for (const id of tagged.get(tag) ?? []) timers.cancel(id); tagged.delete(tag); }
 const pending: (() => void)[] = [];
 /** A widget's press, run once the frame's UI is built (state changes mid-build would break later widgets). */
 export function later(fn: () => void): void { pending.push(fn); }
@@ -452,8 +458,8 @@ function onTerminal(ev: GameEvent): void {
 export function leaderboardLine(): string | null {
   const r = app.results?.lb;
   if (!r) return null;
-  if (r === "posting") return S("lbPosting");
-  return !r.posted ? S("lbNotPosted") : r.rank ? S("lbRank", { rank: r.rank }) : S("lbPosted");
+  if (r === "posting") return S("leaderboardPosting");
+  return !r.posted ? S("leaderboardNotPosted") : r.rank ? S("leaderboardRank", { rank: r.rank }) : S("leaderboardPosted");
 }
 export function resultsNext(): void {
   const c = app.content;
@@ -957,7 +963,7 @@ export function signIn(): void { void requestSignIn().catch(() => undefined); }
 export function copyInvite(): void {
   const link = platform.inviteLink();
   if (!link) return;
-  try { clipboard.writeText(link); toast(S("inviteCopied")); } catch { toast(S("inviteFailed", { link }), 6000); }
+  try { clipboard.writeText(link); toast(S("inviteCopied")); } catch { toast(S("inviteLink", { link }), 6000); }
 }
 
 // ------------------------------------------------------------------ the clock
@@ -989,10 +995,7 @@ onFixedUpdate(() => {
     autosaveT += STEP_MS;
     if (autosaveT > 4000) { autosaveT = 0; autosaveNow(); }
   }
-  for (let i = 0; i < timers.length;) {
-    const t = timers[i]!;
-    if (t.at <= clockMs) { timers.splice(i, 1); t.fn(); } else i++;
-  }
+  timers.advance(STEP_MS / 1000);
   if (app.toast && app.toast.until < clockMs) app.toast = null;
   if (app.caption && app.caption.until < clockMs) app.caption = null;
 });

@@ -5,10 +5,15 @@
 // keys; MISSING=1 prints the missing keys per locale.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STRINGS, EN } from '../js/strings.js';
-import { LOCALES, t, setLocale, contentTitle } from '../js/i18n.js';
+import { readFileSync } from 'node:fs';
+import { contentTitle } from '../js/i18n.js';
 
 import { usedKeys } from './i18n-keys.mjs';
+
+const STRINGS = JSON.parse(readFileSync(new URL('../assets/strings.json', import.meta.url), 'utf8'));
+const LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
+const EN = STRINGS['en-US'];
+const tIn = (loc) => (k, vars) => { const s = STRINGS[loc]?.[k] ?? EN[k] ?? k; return vars ? s.replace(/\{(\w+)\}/g, (m, n) => (n in vars ? String(vars[n]) : m)) : s; };
 
 const ph = (s) => [...String(s).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 
@@ -37,10 +42,8 @@ test('nine locales; en-GB overrides only used keys; no unused rows', () => {
 });
 
 test('translation switches and canvas titles localize', () => {
-  setLocale('de-DE');
+  const t = tIn('de-DE');
   assert.equal(t('{done} / {total} cells', { done: 1, total: 2 }), '1 / 2 Zellen');
-  assert.ok(contentTitle('Daily — 2026-10-01 (speed)').includes('2026-10-01'));
-  setLocale('xx');
-  assert.equal(t('Play'), 'Play');
-  setLocale('en-US');
+  assert.ok(contentTitle('Daily — 2026-10-01 (speed)', t).includes('2026-10-01'));
+  assert.equal(tIn('xx')('Play'), 'Play');
 });

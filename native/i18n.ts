@@ -6,40 +6,33 @@
 // replace the game's own Language setting (sh-language.js) and the DOM
 // re-labelling: every string is drawn through T() each frame, so a change
 // shows on the next frame and never restarts a round or its clock.
-import { onPreferencesChange, preferences } from "starhermit:engine";
+import { strings } from "starhermit:engine";
 import * as ui from "starhermit:ui";
-import { contentTitle as titleOf, setLocale, t } from "../js/i18n.js";
-import { pickPlatformLocale, platformStrings } from "../js/platform-i18n.js";
+import { contentTitle as titleOf } from "../js/i18n.js";
 
-let locale = "";
-function apply(tag: string): void {
-  const next = pickPlatformLocale(String(tag || "en-US")) as string;
-  if (next === locale) return;
-  locale = next;
-  setLocale(locale);
-  ui.setLanguage(locale);
-}
-apply(preferences().language);
-onPreferencesChange((p) => apply(p.language));
+strings.load("assets/strings.json");
+strings.defaultLocale = "en-US";
+ui.setLanguage(strings.locale);
+strings.onChange((locale) => ui.setLanguage(locale));
 
-export function currentLocale(): string { return locale; }
 export type Vars = Record<string, string | number>;
-/** An en-US source string (or symbolic key) in the player's language; `{name}` placeholders from vars. */
-export function T(key: string, vars?: Vars | null): string { return t(key, vars ?? undefined) as string; }
+/** An en-US source string (or symbolic key) in the player's language; `{name}` placeholders from vars. A text with no entry is itself. */
+export function T(key: string, vars?: Vars | null): string {
+  const k = String(key);
+  if (strings.has(k)) return strings.t(k, vars ?? undefined);
+  return vars ? k.replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m)) : k;
+}
 /** Marks an en-US key that is translated with T() where it is shown. */
 export const N = (s: string): string => s;
-/** The account strings (signIn, invite, inviteCopied, inviteFailed, signedOut, lbPosting, lbRank, lbPosted, lbNotPosted). */
-export function S(key: string, vars?: Vars): string {
-  let s = (platformStrings(locale) as Record<string, string>)[key] ?? key;
-  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
-  return s;
-}
+/** The engine's account strings. */
+export function S(key: string, vars?: Vars): string { return strings.t(`starhermit.${key}`, vars); }
 /** A canvas title (content meta.title) in the player's language. */
-export function contentTitle(title: string): string { return titleOf(title) as string; }
+export function contentTitle(title: string): string { return titleOf(title, T) as string; }
 /** Locale-aware digit grouping (i18n.js num), without Intl. */
 export function num(n: number): string {
+  const locale = strings.locale;
   const s = String(Math.round(Number(n) || 0));
-  const sep = locale.startsWith("en") ? "," : locale.startsWith("fr") ? " " : locale === "es-419" ? "," : ".";
+  const sep = locale.startsWith("en") ? "," : locale.startsWith("fr") ? " " : locale === "es-419" ? "," : ".";
   return s.replace(/\B(?=(\d{3})+(?!\d))/g, sep);
 }
 /** m:ss (ui.js fmtTime). */

@@ -25,7 +25,7 @@
 import {
   ACESFilmicToneMapping, OrthographicCamera, AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry,
   DirectionalLight, DoubleSide, Euler, Fog, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Plane, PMREMGenerator, PointLight, Points, PointsMaterial,
+  MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Plane, PMREMGenerator, PointLight, Points, ParticleEmitter, PointsMaterial,
   Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, ShaderMaterial, SRGBColorSpace, TextureLoader, TorusGeometry,
   Vector2, Vector3, Vector4, mergeGeometries, pointerToNdc, renderer, scene, type Material, type Texture,
 } from "starhermit:scene";
@@ -282,11 +282,9 @@ let tips: Mesh | null = null;
 let tipBase = new Color();
 
 // particles
-let points: Points | null = null;
-let pCap = 0, pAlive = 0;
-let pData = new Float32Array(0);
+let sparks: ParticleEmitter | null = null, winSparks: ParticleEmitter | null = null;
+let sparkMat: PointsMaterial | null = null;
 let pRng: Rng = new RNG("fx:fx");
-let pPos = new Float32Array(0), pCol = new Float32Array(0);
 
 const glowGain = (): number => (look?.bloom ? 2.2 : 1);
 
@@ -419,45 +417,25 @@ function placeFloaters(at: number): void {
 }
 
 function buildParticles(): void {
-  if (points) {
-    scene.remove(points);
-    points.geometry.dispose();
-    points.material.dispose();
-    points = null;
-  }
+  for (const e of [sparks, winSparks]) if (e) { scene.remove(e); e.dispose(); }
+  sparkMat?.dispose();
+  sparks = winSparks = sparkMat = null;
   if (!look) return;
-  pCap = Math.min(SPARK_MAX, sparkCap(look));
-  pData = new Float32Array(pCap * 8);
-  pPos = new Float32Array(pCap * 3);
-  pCol = new Float32Array(pCap * 3);
-  pAlive = 0;
-  const g = new BufferGeometry();
-  g.setAttribute("position", new BufferAttribute(pPos, 3));
-  g.setAttribute("color", new BufferAttribute(pCol, 3));
-  g.setDrawRange(0, 0);
-  points = new Points(g, new PointsMaterial({
-    size: 0.14, vertexColors: true, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false, sizeAttenuation: true,
-  }));
-  points.frustumCulled = false;
-  scene.add(points);
+  const capacity = Math.min(SPARK_MAX, sparkCap(look));
+  sparkMat = new PointsMaterial({ size: 0.14, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+  // Up at 1.5–4, ± the spread sideways, falling at 9, gone in 0.35–0.8 s; the win's wider sparks have their own emitter.
+  const emitter = (seed: number, spread: number): ParticleEmitter => {
+    const e = new ParticleEmitter({ capacity, material: sparkMat!, seed, life: [0.35, 0.8], velocity: [0, 2.75, 0], velocitySpread: [spread, 1.25, spread], gravity: [0, -9, 0] });
+    e.frustumCulled = false;
+    scene.add(e);
+    return e;
+  };
+  sparks = emitter(1, 2.2);
+  winSparks = emitter(2, 3.5);
   pRng = new RNG("fx:" + (content?.seed ?? "fx"));
 }
-function spawnBurst(x: number, y: number, z: number, hex: string, n: number, spread = 2.2): void {
-  if (!points) return;
-  if (reducedMotion) n = Math.min(n, 4);
-  const col = color(hex);
-  for (let k = 0; k < n && pAlive < pCap; k++) {
-    const i = pAlive++;
-    const d = pData;
-    d[i * 8] = x; d[i * 8 + 1] = y; d[i * 8 + 2] = z;
-    d[i * 8 + 3] = pRng.range(-spread, spread);
-    d[i * 8 + 4] = pRng.range(1.5, 4);
-    d[i * 8 + 5] = pRng.range(-spread, spread);
-    d[i * 8 + 6] = 0;
-    d[i * 8 + 7] = pRng.range(0.35, 0.8);
-    pCol[i * 3] = col.r; pCol[i * 3 + 1] = col.g; pCol[i * 3 + 2] = col.b;
-  }
-  points.geometry.attributes.color!.needsUpdate = true;
+function spawnBurst(e: ParticleEmitter | null, x: number, y: number, z: number, hex: string, n: number): void {
+  e?.burst(reducedMotion ? Math.min(n, 4) : n, [x, y, z], { color: color(hex) });
 }
 
 // ---------------------------------------------------------------- quality and theme
@@ -668,7 +646,7 @@ export function applyEvents(events: GameEvent[], state: State): void {
           if (reducedMotion) c.h = H_FILLED;
           cellMesh.setColorAt(i, cellBaseColor(i));
           const { x, z } = cellPos(i);
-          spawnBurst(x, H_FILLED + 0.1, z, palette[ev.color!] ?? "#ffffff", ev.tool === "region" ? 2 : 5);
+          spawnBurst(sparks, x, H_FILLED + 0.1, z, palette[ev.color!] ?? "#ffffff", ev.tool === "region" ? 2 : 5);
         }
         colorDirty = markerDirty = true;
         break;
@@ -745,7 +723,7 @@ function completionWave(): void {
     cells[i]!.delay = Math.hypot(x, z) * 0.045;
     cells[i]!.flash = 1.5;
   }
-  for (let k = 0; k < 4; k++) spawnBurst(pRng.range(-W / 2, W / 2), 1.2, pRng.range(-H / 2, H / 2), theme?.accentA ?? "#22d3ee", 30, 3.5);
+  for (let k = 0; k < 4; k++) spawnBurst(winSparks, pRng.range(-W / 2, W / 2), 1.2, pRng.range(-H / 2, H / 2), theme?.accentA ?? "#22d3ee", 30);
   shake(0.5);
 }
 function shake(amp: number): void {
@@ -763,8 +741,7 @@ export function settle(): void {
   }
   cellMesh.instanceMatrix.needsUpdate = true;
   revealT = Infinity;
-  pAlive = 0;
-  points?.geometry.setDrawRange(0, 0);
+  sparks?.clear(); winSparks?.clear();
   shakeAmp = 0;
 }
 
@@ -925,29 +902,6 @@ export function update(dtSec: number, w: number, h: number): void {
   if (hoverRing?.visible) {
     const s = 1 + 0.06 * Math.sin(time * 5);
     hoverRing.scale.set(s, s, 1);
-  }
-  // sparks
-  if (points && pAlive > 0) {
-    const d = pData;
-    let i = 0;
-    while (i < pAlive) {
-      d[i * 8 + 6] = d[i * 8 + 6]! + dt;
-      if (d[i * 8 + 6]! >= d[i * 8 + 7]!) {
-        const last = --pAlive;
-        for (let k = 0; k < 8; k++) d[i * 8 + k] = d[last * 8 + k]!;
-        for (let k = 0; k < 3; k++) pCol[i * 3 + k] = pCol[last * 3 + k]!;
-        continue;
-      }
-      d[i * 8 + 4] = d[i * 8 + 4]! - 9 * dt;
-      d[i * 8] = d[i * 8]! + d[i * 8 + 3]! * dt;
-      d[i * 8 + 1] = d[i * 8 + 1]! + d[i * 8 + 4]! * dt;
-      d[i * 8 + 2] = d[i * 8 + 2]! + d[i * 8 + 5]! * dt;
-      pPos[i * 3] = d[i * 8]!; pPos[i * 3 + 1] = d[i * 8 + 1]!; pPos[i * 3 + 2] = d[i * 8 + 2]!;
-      i++;
-    }
-    points.geometry.attributes.position!.needsUpdate = true;
-    points.geometry.attributes.color!.needsUpdate = true;
-    points.geometry.setDrawRange(0, pAlive);
   }
   // ambient motion (Background animated; off with reduced motion)
   if (look?.animated && !reducedMotion) {
