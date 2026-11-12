@@ -11,7 +11,7 @@ import { contentTitle } from '../js/i18n.js';
 import { usedKeys } from './i18n-keys.mjs';
 
 const STRINGS = JSON.parse(readFileSync(new URL('../assets/strings.json', import.meta.url), 'utf8'));
-const LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
+const LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT', 'fr-BE', 'de-BE', 'en-SG', 'en-HK', 'en-BQ', 'es-CO', 'de-IT', 'fr-IT', 'es-CL', 'es-AR', 'es-EC', 'de-BR', 'zh-SG', 'ms-SG', 'ta-SG', 'zh-HK', 'yue-HK', 'fi-FI', 'sv-FI', 'et-EE', 'id-ID', 'vi-VN', 'ja-JP', 'nl-BE', 'nl-NL', 'ru-FI', 'ru-EE', 'su-ID', 'da-DE', 'lb-BE', 'co-FR', 'eu-FR', 'ca-FR', 'oc-FR', 'sl-IT', 'fur-IT', 'ca-IT', 'oc-IT', 'ca-ES', 'eu-ES', 'gl-ES', 'bew-ID', 'km-VN'];
 const EN = STRINGS['en-US'];
 const tIn = (loc) => (k, vars) => { const s = STRINGS[loc]?.[k] ?? EN[k] ?? k; return vars ? s.replace(/\{(\w+)\}/g, (m, n) => (n in vars ? String(vars[n]) : m)) : s; };
 

@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Pixel Atelier on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
 // the engine's web runtime. The rules (js/rules.js), content (js/content.js)
@@ -1069,7 +1070,7 @@ onUpdate((dt) => {
   applyTokens(ui.preferences().highContrast);
   audio.update();
 });
-onRender(() => {
+onRender(__l10nRender(() => {
   hudRects.length = 0;
   const wasPlaying = playing();
   drawScreens();
@@ -1077,4 +1078,8 @@ onRender(() => {
   pointerInput(wasPlaying);
   const f = frame();
   render.update(frameDt, f.width, f.height);
-});
+}));
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);

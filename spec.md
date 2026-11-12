@@ -185,3 +185,11 @@ Actions are declared in `starhermit.txt` (players rebind keys and pads in the ru
 - Hold to paint off (toggle) was a stored but unused option in the browser build; it works now.
 - Erase local data resets the progress, the round snapshot, the local boards and the game's options on this device
   (the account's copy of the progress follows the next save).
+
+<!-- regional-localization:start -->
+
+### Regional interface languages
+
+The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `zh-SG`, `ms-SG`, `ta-SG`, `zh-HK`, `yue-HK`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `ja-JP`, `nl-BE`, `nl-NL`, `ru-FI`, `ru-EE`, `su-ID`, `da-DE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `fur-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `bew-ID`, `km-VN`.
+
+<!-- regional-localization:end -->

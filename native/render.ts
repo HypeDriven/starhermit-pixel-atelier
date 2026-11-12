@@ -1,3 +1,5 @@
+// localization-runtime:attached
+import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // The neon drafting table on starhermit:scene, as the browser build's
 // js/render.js drew it with three.js r170: the table slab with its ruled
 // grid (the detailed surface with speckle, glowing major lines and a satin
@@ -159,7 +161,7 @@ function makeDigitAtlas(): CanvasTexture {
   g.fillStyle = "#ffffff";
   g.strokeStyle = "rgba(0,0,0,0.65)";
   g.lineWidth = 5;
-  g.font = `bold ${slot * 0.62}px sans-serif`;
+  g.font = __l10nCanvasFont(`bold ${slot * 0.62}px sans-serif`);
   g.textAlign = "center";
   g.textBaseline = "middle";
   for (let i = 0; i < 9; i++) {

@@ -1,3 +1,7 @@
+import { localizedStyle as __l10nStyle } from "./l10n/font.ts";
+import { localizedDrawOptions as __l10nDrawOptions } from "./l10n/font.ts";
+// localization-runtime:attached
+import { openLocalizedOptions as __l10nOptions } from "./l10n/menu.ts";
 // The browser build's DOM shell (index.html, js/ui.js, styles.css) as
 // starhermit:ui, built every frame over the drafting table: the menu screens
 // (title, lessons, journey map, setup, results, profile, leaderboard,
@@ -12,7 +16,21 @@
 // phone portrait (smaller pills and swatches) and short landscape
 // (≤ 500 px tall: the tray as a column beside the board, at the start side
 // for the left-handed layout). Rails swap sides for the left-handed layout.
-import { frame, openMenu } from "starhermit:engine";
+// The browser build's DOM shell (index.html, js/ui.js, styles.css) as
+// starhermit:ui, built every frame over the drafting table: the menu screens
+// (title, lessons, journey map, setup, results, profile, leaderboard,
+// settings, how to play) as cards over the scene's veil, the play HUD (pause
+// button, title and mode, the timer / moves / errors / progress pills), the
+// Objective and Tools rails (wide windows) or the side drawers behind their
+// tabs with the lesson strip (compact windows), the palette tray (swatches
+// with number, shape and cells left; a column at the side on short
+// landscape windows), the pause card, the confirmation card, the toast,
+// captions and the countdown. The old media queries are layouts picked by
+// the window's logical size: wide (≥ 1024 px: rails), compact (drawers),
+// phone portrait (smaller pills and swatches) and short landscape
+// (≤ 500 px tall: the tray as a column beside the board, at the start side
+// for the left-handed layout). Rails swap sides for the left-handed layout.
+import { frame } from "starhermit:engine";
 import { bindings, requestRebind } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
@@ -42,7 +60,7 @@ function textWidth(text: string, style: string, kind?: "button" | "heading"): nu
 /** Text up to `width` wide: one label when it fits, else a paragraph. */
 function para(text: string, width: number, cls = "text", id?: string): void {
   if (!text) return;
-  let u = ui.style(cls);
+  let u = ui.style(__l10nStyle(cls));
   if (id) u = u.id(id);
   if (textWidth(text, cls) <= width) u.label(text);
   else u.paragraph(text, Math.max(20, width));
@@ -60,12 +78,12 @@ function button(b: Btn): void {
   if (b.content) opts.content = b.content;
   else if (b.width != null && buttonWidth(b.text, style) > b.width) {
     const inner = b.width - 34;
-    opts.content = () => { ui.style("wrap").paragraph(b.text, Math.max(20, inner)); };
+    opts.content = () => { ui.style(__l10nStyle("wrap")).paragraph(b.text, Math.max(20, inner)); };
   } else if (b.name && b.name !== b.text) opts.content = () => { ui.label(b.text); };
   const s: ui.Style = {};
   if (b.width != null) s.width = b.width;
   if (b.height != null) s.height = b.height;
-  if (ui.style(style, s).id(b.id).button(b.name ?? b.text, opts) && fresh()) later(b.act);
+  if (ui.style(__l10nStyle(style), __l10nStyle(s)).id(b.id).button(b.name ?? b.text, opts) && fresh()) later(b.act);
 }
 /** Buttons in rows that wrap at `width` (flex-wrap), optionally stretched across each row. */
 function flow(label: string, list: Btn[], width: number, gap = 8, stretch = false, justify: "start" | "center" = "start"): void {
@@ -202,14 +220,14 @@ function wordmark(text: string, w: number): void {
   ui.widget(text, {
     role: "image", size: { width: w, height: size * 1.3 }, draw: (r, st) => {
       const px = size * st.scale;
-      const total = draw.measureText(text, { size: px, weight: "700", letterSpacing: px * 0.02 }).width;
+      const total = draw.measureText(text, __l10nDrawOptions({ size: px, weight: "700", letterSpacing: px * 0.02 })).width;
       const chars = [...text];
-      const at = (n: number): number => (n ? draw.measureText(chars.slice(0, n).join(""), { size: px, weight: "700", letterSpacing: px * 0.02 }).width : 0);
+      const at = (n: number): number => (n ? draw.measureText(chars.slice(0, n).join(""), __l10nDrawOptions({ size: px, weight: "700", letterSpacing: px * 0.02 })).width : 0);
       chars.forEach((ch, i) => {
         if (ch === " ") return;
         const x0 = at(i), x1 = at(i + 1);
         const t = Math.max(0, Math.min(1, ((x0 + x1) / 2) / Math.max(1, total)));
-        draw.text(ch, r.x + x0, r.y + px * 0.08, { size: px, weight: "700", color: mix(token("accent-a"), token("accent-b"), t) });
+        draw.text(ch, r.x + x0, r.y + px * 0.08, __l10nDrawOptions({ size: px, weight: "700", color: mix(token("accent-a"), token("accent-b"), t) }));
       });
     },
   });
@@ -292,10 +310,10 @@ function journeyScreen(w: number): void {
             const k = ws.scale, cx = r.x + r.width / 2;
             const big = Math.max(10, Math.min(16, cw * 0.22)) * k;
             let y = r.y + r.height * 0.12;
-            draw.text(s.meta.mastery ? "★" : String(si + 1), cx, y, { size: big, weight: "800", color: token("text"), align: "center" });
+            draw.text(s.meta.mastery ? "★" : String(si + 1), cx, y, __l10nDrawOptions({ size: big, weight: "800", color: token("text"), align: "center" }));
             y += big * 1.15;
             const sm = Math.max(8, Math.min(12.8, cw * 0.18)) * k;
-            draw.text("●".repeat(st) + "○".repeat(Math.max(0, 3 - st)), cx, y, { size: sm, color: "#ffd166", align: "center", letterSpacing: k });
+            draw.text("●".repeat(st) + "○".repeat(Math.max(0, 3 - st)), cx, y, __l10nDrawOptions({ size: sm, color: "#ffd166", align: "center", letterSpacing: k }));
             y += sm * 1.2;
             const nm = Math.max(7, Math.min(9.9, cw * 0.13)) * k;
             const maxW = r.width - 8 * k;
@@ -303,15 +321,15 @@ function journeyScreen(w: number): void {
             let line = "";
             for (const word of title.split(" ")) {
               const tryL = line ? `${line} ${word}` : word;
-              if (draw.measureText(tryL, { size: nm }).width <= maxW || !line) line = tryL;
+              if (draw.measureText(tryL, __l10nDrawOptions({ size: nm })).width <= maxW || !line) line = tryL;
               else { lines.push(line); line = word; }
             }
             if (line) lines.push(line);
             lines.slice(0, 2).forEach((l, li) => {
               let t = l;
-              while (t.length > 1 && draw.measureText(t, { size: nm }).width > maxW) t = t.slice(0, -1);
+              while (t.length > 1 && draw.measureText(t, __l10nDrawOptions({ size: nm })).width > maxW) t = t.slice(0, -1);
               if (t !== l || (li === 1 && lines.length > 2)) t = t.replace(/.$/, "…");
-              if (y + nm * (li + 1) * 1.1 <= r.y + r.height) draw.text(t, cx, y + li * nm * 1.1, { size: nm, color: token("dim"), align: "center" });
+              if (y + nm * (li + 1) * 1.1 <= r.y + r.height) draw.text(t, cx, y + li * nm * 1.1, __l10nDrawOptions({ size: nm, color: token("dim"), align: "center" }));
             });
             // .stage-cell:disabled { opacity: 0.35 }
             if (!open) draw.roundRect(r.x, r.y, r.width, r.height, 10, "#0d1426a6");
@@ -387,11 +405,11 @@ function resultsScreen(w: number): void {
   ui.column("results-table", () => {
     rows.forEach(([k, v, cls], i) => ui.row(`score-${i}`, () => {
       ui.column(`score-${i}-k`, () => para(k, w - 120, "td"), { width: w - 116 });
-      ui.column(`score-${i}-v`, () => ui.style(cls).id(`score-${i}-n`).label(v), { width: 84, align: "end" });
+      ui.column(`score-${i}-v`, () => ui.style(__l10nStyle(cls)).id(`score-${i}-n`).label(v), { width: 84, align: "end" });
     }, { style: "score-row", width: w, spacing: 0, align: "center" }));
     ui.row("score-total", () => {
       ui.column("score-total-k", () => para(T("Total"), w - 120, "total"), { width: w - 116 });
-      ui.column("score-total-v", () => ui.style("total-num").id("results-total").label(String(f.total)), { width: 84, align: "end" });
+      ui.column("score-total-v", () => ui.style(__l10nStyle("total-num")).id("results-total").label(String(f.total)), { width: 84, align: "end" });
     }, { style: "score-row-last", width: w, spacing: 0, align: "center" });
   }, { width: w, spacing: 0 });
   para(T("{pct}% painted · {cells} cells · {actions} actions · best combo ×{combo} · {time}", {
@@ -426,7 +444,7 @@ function flowBadges(list: string[], w: number): void {
     rows[rows.length - 1]!.push(b);
   }
   ui.column("ach-row", () => rows.forEach((row, ri) => ui.row(`ach-row-${ri}`, () => {
-    row.forEach((b, i) => ui.row(`ach-${ri}-${i}`, () => ui.style("badge-text").label(b), { style: "ach-badge" }));
+    row.forEach((b, i) => ui.row(`ach-${ri}-${i}`, () => ui.style(__l10nStyle("badge-text")).label(b), { style: "ach-badge" }));
   }, { spacing: 6 })), { spacing: 6, width: w });
 }
 
@@ -512,7 +530,7 @@ function boardScreen(w: number): void {
     if (b.entries === null) para(T("Loading…"), w, "dim", "board-loading");
     else if (!b.entries.length) para(T("No scores yet — be the first."), w, "dim", "board-empty");
     else b.entries.slice(0, 20).forEach((e, i) => ui.row(`board-${i}`, () => {
-      ui.column(`board-${i}-n`, () => ui.style("dim").label(`${i + 1}.`), { width: 32 });
+      ui.column(`board-${i}-n`, () => ui.style(__l10nStyle("dim")).label(`${i + 1}.`), { width: 32 });
       ui.column(`board-${i}-t`, () => para(T("{name} — {score} ({pct}%, {errors} errors, {time})", {
         name: e.name, score: e.score, pct: Math.round(e.progressPct), errors: e.errors, time: fmtTime(e.elapsedMs),
       }), w - 52, e.name === me ? "me" : "text"), { width: w - 40 });
@@ -532,7 +550,7 @@ function toggleRow(id: string, label: string, on: boolean, w: number, set: (v: b
         const s = st.scale, box = 22 * s, bx = r.x + (r.width - box) / 2, by = r.y + (r.height - box) / 2;
         draw.roundRect(bx, by, box, box, 4, on ? token("accent-a") : token("field"));
         draw.strokeRoundRect(bx, by, box, box, 4, token("edge"), 2);
-        if (on) draw.text("✓", bx + box / 2, by + 1 * s, { size: 17 * s, color: "#04121a", align: "center", weight: "bold" });
+        if (on) draw.text("✓", bx + box / 2, by + 1 * s, __l10nDrawOptions({ size: 17 * s, color: "#04121a", align: "center", weight: "bold" }));
       },
     });
     para(T(label), w - 56, "strong", `${id}-label`);
@@ -553,7 +571,7 @@ function settingsScreen(w: number, L: Layout): void {
   const sets: (() => void)[] = [
     () => fieldset("fs-audio", T("Audio"), fw, (iw) => {
       para(T("Volumes, mute, graphics, language, larger text, high contrast and reduced motion are in the StarHermit Options."), iw, "dim", "options-note");
-      flow("fs-audio-btns", [{ id: "btn-options", text: T("Open Options"), act: () => openMenu() }], iw);
+      flow("fs-audio-btns", [{ id: "btn-options", text: T("Open Options"), act: () => __l10nOptions() }], iw);
       toggleRow("set-captions", N("Captions for audio cues"), o.captions, iw, (v) => platform.setOption("captions", v));
       toggleRow("set-haptics", N("Haptics (vibration)"), o.haptics, iw, (v) => platform.setOption("haptics", v));
     }),
@@ -593,7 +611,7 @@ function settingsScreen(w: number, L: Layout): void {
                   const sz = 9.9 * k;
                   const words = label.split(" ");
                   words.slice(-2).forEach((wd, wi, arr) => draw.text(wd, rr.x + 6 * k, rr.y + rr.height - (arr.length - wi) * sz * 1.15 - 4 * k,
-                    { size: sz, weight: "700", color: "#ffffff", shadow: { color: "#000000", x: 0, y: k } }));
+                    __l10nDrawOptions({ size: sz, weight: "700", color: "#ffffff", shadow: { color: "#000000", x: 0, y: k } })));
                 },
               });
               if (res.activated && owned && fresh()) later(() => setTheme(th.id));
@@ -665,7 +683,7 @@ function playHud(L: Layout): void {
   // top bar (.hud-top)
   const top = ui.place("hud-top-l", { anchor: "top-start", x: pad, y: L.landShort ? 4 : 8 }, () => {
     ui.row("hud-group", () => {
-      const r = ui.style("icon-btn", { width: 44, height: 44 }).id("btn-hud-pause").widget(T("Pause"), {
+      const r = ui.style(__l10nStyle("icon-btn"), __l10nStyle({ width: 44, height: 44 })).id("btn-hud-pause").widget(T("Pause"), {
         role: "button", size: { width: 44, height: 44 },
         draw: (rr, ws) => {
           const k = ws.scale, bw = 4 * k, bh = 16 * k, cx = rr.x + rr.width / 2, cy = rr.y + rr.height / 2;
@@ -676,7 +694,7 @@ function playHud(L: Layout): void {
       if (r.activated && fresh()) later(() => (app.replay ? exitReplay() : pauseToggle()));
       ui.column("hud-objective", () => {
         para(contentTitle(c.meta.title), Math.min(360, L.lw * 0.45), L.phone ? "hud-title-sm" : "hud-title", "hud-title");
-        ui.style("hud-mode").id("hud-mode").label(T(`mode.${app.mode}`).toUpperCase());
+        ui.style(__l10nStyle("hud-mode")).id("hud-mode").label(T(`mode.${app.mode}`).toUpperCase());
       }, { spacing: 0 });
     }, { spacing: 8, align: "center" });
   });
@@ -697,7 +715,7 @@ function playHud(L: Layout): void {
     ui.row("hud-status", () => {
       for (const [id, text, kind] of pills) {
         const box = L.phone ? "hud-pill-sm" : kind === "warn" ? "hud-pill-warn" : kind === "danger" ? "hud-pill-danger" : "hud-pill";
-        ui.row(id, () => ui.style(kind === "warn" ? "pill-text-warn" : kind === "danger" ? "pill-text-danger" : "pill-text").id(`${id}-text`).label(text), { style: box, align: "center" });
+        ui.row(id, () => ui.style(__l10nStyle(kind === "warn" ? "pill-text-warn" : kind === "danger" ? "pill-text-danger" : "pill-text")).id(`${id}-text`).label(text), { style: box, align: "center" });
       }
     }, { spacing: 8, align: "center" });
   });
@@ -780,8 +798,8 @@ function toolsRail(w: number, drawer = false): void {
   const tool = (id: string, name: string, key: string, sel: boolean | undefined, act: () => void, disabled = false): Btn => ({
     id, text: name, name, style: sel === undefined ? "btn" : "tool", selected: sel, width: w, act: close(act), disabled,
     content: () => ui.column(`${id}-face`, () => {
-      ui.style("btn-title-c").label(name);
-      if (key) ui.row(`${id}-kbd`, () => ui.style("kbd").label(key), { style: "kbd-box" });
+      ui.style(__l10nStyle("btn-title-c")).label(name);
+      if (key) ui.row(`${id}-kbd`, () => ui.style(__l10nStyle("kbd")).label(key), { style: "kbd-box" });
     }, { spacing: 2, align: "center", width: w - 34 }),
   });
   const k = (a: string): string => keyOf(a);
@@ -835,11 +853,11 @@ function tray(L: Layout, st: ReturnType<typeof replayState> & object): void {
           const big = 16 * k, mid = 11.2 * k, sm = 9.9 * k;
           const h3 = big + mid + sm + 2 * k;
           let y = r.y + (r.height - h3) / 2 - 1 * k;
-          draw.text(idx === 0 ? "•" : String(idx), cx, y, { size: big, weight: "800", color: tc, align: "center", ...(shadow ? { shadow } : {}) });
+          draw.text(idx === 0 ? "•" : String(idx), cx, y, __l10nDrawOptions({ size: big, weight: "800", color: tc, align: "center", ...(shadow ? { shadow } : {}) }));
           y += big;
-          draw.text(SHAPES[idx % SHAPES.length]!, cx, y, { size: mid, color: tc, align: "center", ...(shadow ? { shadow } : {}) });
+          draw.text(SHAPES[idx % SHAPES.length]!, cx, y, __l10nDrawOptions({ size: mid, color: tc, align: "center", ...(shadow ? { shadow } : {}) }));
           y += mid + 2 * k;
-          draw.text(String(left), cx, y, { size: sm, weight: "600", color: tc, align: "center", ...(shadow ? { shadow } : {}) });
+          draw.text(String(left), cx, y, __l10nDrawOptions({ size: sm, weight: "600", color: tc, align: "center", ...(shadow ? { shadow } : {}) }));
         },
       });
       if (res.activated && fresh() && !app.replay) later(() => selectColor(idx));
@@ -907,7 +925,7 @@ function countdown(L: Layout): void {
   if (!app.countdown) return;
   const text = app.countdown === "Go!" ? T("Go!") : app.countdown;
   const cls = L.lw < 500 || L.lh < 500 ? "countdown-sm" : "countdown";
-  ui.place("countdown", "center", () => { ui.style(cls).id("countdown-text").label(text); });
+  ui.place("countdown", "center", () => { ui.style(__l10nStyle(cls)).id("countdown-text").label(text); });
   if (text !== lastCount) { lastCount = text; ui.announce(text, { politeness: "assertive" }); }
 }
 let lastCount = "";

@@ -74,3 +74,7 @@ engine.gamepad.pan_down=LeftStickDown
 engine.gamepad.pan_left=LeftStickLeft
 engine.gamepad.pan_right=LeftStickRight
 engine.gamepad.pause=Start+East
+
+# Game language (saved per player); Automatic follows the account/device.
+control.localization=F2 | Language
+engine.group.localization=Interface
