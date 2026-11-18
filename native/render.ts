@@ -1,5 +1,6 @@
 // localization-runtime:attached
-import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
+import {
+  localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // The neon drafting table on starhermit:scene, as the browser build's
 // js/render.js drew it with three.js r170: the table slab with its ruled
 // grid (the detailed surface with speckle, glowing major lines and a satin
@@ -9,8 +10,7 @@ import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // raised and dimmed with a red X), the bevel highlight and side gradient
 // and the per-cell fill glow (the old onBeforeCompile patch, as material
 // hooks reading the glow from the instances' custom slot), the pulsing
-// markers on cells that want the selected color, the hover box and ring,
-// the keyboard cursor, the ghost (region / hint preview), the digit labels
+// markers on cells that want the selected color, the hover box and ring, // the keyboard cursor, the ghost (region / hint preview), the digit labels
 // (a ShaderMaterial over a digit atlas, at close zoom or always), the board
 // frame, the drop-in reveal, the spring-animated heights and the completion
 // wave, the fill sparks, the dust, the corner pylons, the holo ring and the
@@ -25,12 +25,9 @@ import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // order. The canvas filled the window behind the DOM shell; so does the
 // camera.
 import {
-  ACESFilmicToneMapping, OrthographicCamera, AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry,
-  DirectionalLight, DoubleSide, Euler, Fog, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Plane, PMREMGenerator, PointLight, Points, ParticleEmitter, PointsMaterial,
-  Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, ShaderMaterial, SRGBColorSpace, TextureLoader, TorusGeometry,
-  Vector2, Vector3, Vector4, mergeGeometries, pointerToNdc, renderer, scene, type Material, type Texture,
+  ACESFilmicToneMapping, OrthographicCamera, AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, DoubleSide, Euler, Fog, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Plane, PMREMGenerator, PointLight, Points, PointsMaterial, Quaternion, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, ShaderMaterial, SRGBColorSpace, TextureLoader, TorusGeometry, Vector2, Vector3, Vector4, mergeGeometries, pointerToNdc, renderer, scene, type Material, type Texture,
 } from "starhermit:scene";
+import { GPUParticleEmitter } from "starhermit:particles";
 import { OffscreenCanvas, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
 import { RNG, type Content, type GameEvent, type Rng, type State, type Theme } from "./game.ts";
 import { DUST_MAX, SPARK_MAX, sparkCap, type Look } from "./quality.ts";
@@ -284,7 +281,7 @@ let tips: Mesh | null = null;
 let tipBase = new Color();
 
 // particles
-let sparks: ParticleEmitter | null = null, winSparks: ParticleEmitter | null = null;
+let sparks: GPUParticleEmitter | null = null, winSparks: GPUParticleEmitter | null = null;
 let sparkMat: PointsMaterial | null = null;
 let pRng: Rng = new RNG("fx:fx");
 
@@ -426,8 +423,8 @@ function buildParticles(): void {
   const capacity = Math.min(SPARK_MAX, sparkCap(look));
   sparkMat = new PointsMaterial({ size: 0.14, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false, sizeAttenuation: true });
   // Up at 1.5–4, ± the spread sideways, falling at 9, gone in 0.35–0.8 s; the win's wider sparks have their own emitter.
-  const emitter = (seed: number, spread: number): ParticleEmitter => {
-    const e = new ParticleEmitter({ capacity, material: sparkMat!, seed, life: [0.35, 0.8], velocity: [0, 2.75, 0], velocitySpread: [spread, 1.25, spread], gravity: [0, -9, 0] });
+  const emitter = (seed: number, spread: number): GPUParticleEmitter => {
+    const e = new GPUParticleEmitter({ capacity, material: sparkMat!, seed, life: [0.35, 0.8], velocity: [0, 2.75, 0], velocitySpread: [spread, 1.25, spread], gravity: [0, -9, 0] });
     e.frustumCulled = false;
     scene.add(e);
     return e;
@@ -436,7 +433,7 @@ function buildParticles(): void {
   winSparks = emitter(2, 3.5);
   pRng = new RNG("fx:" + (content?.seed ?? "fx"));
 }
-function spawnBurst(e: ParticleEmitter | null, x: number, y: number, z: number, hex: string, n: number): void {
+function spawnBurst(e: GPUParticleEmitter | null, x: number, y: number, z: number, hex: string, n: number): void {
   e?.burst(reducedMotion ? Math.min(n, 4) : n, [x, y, z], { color: color(hex) });
 }
 

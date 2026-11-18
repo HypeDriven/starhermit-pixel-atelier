@@ -145,7 +145,7 @@ const gray = (hex: string, k: number): string => {
 };
 
 // ------------------------------------------------------------------ the frame
-export function drawScreens(): void {
+function drawScreensImmediate(): void {
   const L = layoutNow();
   const f = frame();
   if (app.screen) menuScreen(L);
@@ -931,12 +931,6 @@ function countdown(L: Layout): void {
 let lastCount = "";
 function toastAndCaptions(L: Layout): void {
   const max = Math.min(L.lw * 0.9, 640);
-  if (app.toast) {
-    const t = app.toast.text;
-    rect(ui.place("toast", { anchor: "bottom", y: app.screen ? 24 : 96 }, () => {
-      ui.column("toast-box", () => para(t, max - 44, "toast-text", "toast-text"), { style: "toast", align: "center" });
-    }));
-  }
   if (app.caption && !app.screen) {
     const t = app.caption.text;
     ui.place("captions", { anchor: "bottom", y: 150 }, () => {
@@ -946,3 +940,10 @@ function toastAndCaptions(L: Layout): void {
   void now;
 }
 void Rules;
+
+export function drawScreens(): void {
+  if (app.screen !== "help") { drawScreensImmediate(); return; }
+  const actions = ["fill","cursor_up","cursor_down","cursor_left","cursor_right","next_color","prev_color","region_tool","brush_tool","undo","hint","color_0","color_1","color_2","color_3","color_4","color_5","color_6","color_7","color_8","cam_reset","zoom_in","zoom_out","pan_up","pan_down","pan_left","pan_right","pause","cancel"];
+  const version = JSON.stringify([(app as any).settings ?? (app as any).options ?? {}, (platform as any).options ?? {}, actions.map((action) => bindings(action))]);
+  ui.retain!("help-screen", version, drawScreensImmediate);
+}

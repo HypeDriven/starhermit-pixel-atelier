@@ -1,7 +1,7 @@
 # Pixel Atelier — Specification (StarHermit engine build)
 
 **Status:** running specification of the shipped game.
-**Runtime:** StarHermit engine script game, `engine.version=1.39.0`, `engine.minor=39` (host API 1.39), entry
+**Runtime:** StarHermit engine script game, `engine.version=1.44.1`, `engine.minor=44` (host API 1.44), entry
 `native/main.ts`. Played natively by the StarHermit client and in browsers by the engine's web runtime (the loader
 `index.html` and `starhermit-files.json` written by `npm run package`).
 **Players:** one; local casual boards per canvas, the platform's Score Chase leaderboard when signed in.
@@ -193,3 +193,13 @@ Actions are declared in `starhermit.txt` (players rebind keys and pads in the ru
 The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `zh-SG`, `ms-SG`, `ta-SG`, `zh-HK`, `yue-HK`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `ja-JP`, `nl-BE`, `nl-NL`, `ru-FI`, `ru-EE`, `su-ID`, `da-DE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `fur-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `bew-ID`, `km-VN`.
 
 <!-- regional-localization:end -->
+
+Cosmetic particle emitters use native GPU particles with automatic CPU fallback on devices or graphics tiers without GPU particle support.
+
+## Engine 1.44.1
+
+Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+
+The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
+
+Toasts use native engine stacking, styling, accessibility and lifetime management.

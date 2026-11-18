@@ -121,8 +121,9 @@ export function later(fn: () => void): void { pending.push(fn); }
 export function announce(text: string, assertive = false): void {
   if (text) ui.announce(text.slice(0, 500), { politeness: assertive ? "assertive" : "polite" });
 }
-/** ui.js toast (one at a time, 2.6 s). */
-export function toast(text: string, ms = 2600): void { app.toast = { text, until: clockMs + ms }; }
+export function toast(text: string, ms = 2600): void {
+  ui.toast!(text, { duration: ms / 1000, position: "bottom", offset: app.screen ? 24 : 96, style: "toast", dismissible: false });
+}
 function caption(text: string): void {
   if (!platform.options.captions) return;
   const m = /^Combo (\d+)$/.exec(text);
