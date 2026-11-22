@@ -1,7 +1,7 @@
 # Pixel Atelier — Specification (StarHermit engine build)
 
 **Status:** running specification of the shipped game.
-**Runtime:** StarHermit engine script game, `engine.version=1.44.1`, `engine.minor=44` (host API 1.44), entry
+**Runtime:** StarHermit engine script game, `engine.version=1.47.0`, `engine.minor=47` (host API 1.47), entry
 `native/main.ts`. Played natively by the StarHermit client and in browsers by the engine's web runtime (the loader
 `index.html` and `starhermit-files.json` written by `npm run package`).
 **Players:** one; local casual boards per canvas, the platform's Score Chase leaderboard when signed in.
@@ -196,10 +196,14 @@ The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-S
 
 Cosmetic particle emitters use native GPU particles with automatic CPU fallback on devices or graphics tiers without GPU particle support.
 
-## Engine 1.44.1
+## Engine 1.47.0
 
-Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+Browser play uses the WebGPU-only StarHermit 1.47.0 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
 
 The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
 
 Toasts use native engine stacking, styling, accessibility and lifetime management.
+
+Browser rendering uses the engine's asynchronous pipeline creation so newly encountered materials do not stall the page. Native play retains the engine's synchronous pipeline behavior.
+
+Higher graphics tiers use native per-object motion blur for moving pieces and effects. Camera motion stays sharp, lower tiers omit the effect, and the runtime's Motion blur and Reduce motion preferences remain authoritative.
