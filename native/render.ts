@@ -202,6 +202,8 @@ const TABLE = 64;
 const tableMat = new MeshStandardMaterial({ roughness: 0.85, metalness: 0.15 });
 const table = new Mesh(new BoxGeometry(TABLE, 1.2, TABLE), tableMat);
 table.position.y = -0.62;
+// Still scenery (host API 1.49): the table and its neon edges never move.
+table.movable = false;
 scene.add(table);
 const edgeMat = new MeshBasicMaterial({ color: color("#22d3ee") });
 const tableEdges = (() => {
@@ -213,6 +215,7 @@ const tableEdges = (() => {
   }
   return new Mesh(mergeGeometries(gs)!, edgeMat);
 })();
+tableEdges.movable = false;
 scene.add(tableEdges);
 const props = new Group();
 scene.add(props);
@@ -377,8 +380,12 @@ function buildProps(): void {
     tip.translate(x, h - 1.2 + 0.09, z);
     tipGeoms.push(tip);
   }
-  props.add(new Mesh(mergeGeometries(geoms)!, pylonMat));
+  // Still scenery: the pylons and their tips stand where they are built (the tips only pulse in colour).
+  const pylons = new Mesh(mergeGeometries(geoms)!, pylonMat);
+  pylons.movable = false;
+  props.add(pylons);
   tips = new Mesh(mergeGeometries(tipGeoms)!, tipMat);
+  tips.movable = false;
   tipBase = accent.clone().multiplyScalar(glow);
   props.add(tips);
   const ext = Math.max(W, H) * CELL * 0.5;
@@ -433,8 +440,15 @@ function buildParticles(): void {
   winSparks = emitter(2, 3.5);
   pRng = new RNG("fx:" + (content?.seed ?? "fx"));
 }
+/** Bursts queued on each emitter since the last frame: an emitter holds at most its capacity waiting (a RangeError
+ * past it), which a region fill on a large board at Particles low (96) used to reach in one frame. */
+const burstsWaiting = new Map<GPUParticleEmitter, number>();
 function spawnBurst(e: GPUParticleEmitter | null, x: number, y: number, z: number, hex: string, n: number): void {
-  e?.burst(reducedMotion ? Math.min(n, 4) : n, [x, y, z], { color: color(hex) });
+  if (!e) return;
+  const waiting = burstsWaiting.get(e) ?? 0;
+  if (waiting >= e.capacity) return; // the rest of this frame's sparks are left out
+  burstsWaiting.set(e, waiting + 1);
+  e.burst(reducedMotion ? Math.min(n, 4) : n, [x, y, z], { color: color(hex) });
 }
 
 // ---------------------------------------------------------------- quality and theme
@@ -593,6 +607,7 @@ export function setBoard(c: Content, pal: string[]): void {
     labels.setCustomAt(i, tmp4, 0);
   }
   labels.visible = cellLabels;
+  labels.movable = false; // still: its instances are placed once per board
   group.add(labels);
 
   const fg: BufferGeometry[] = [];
@@ -603,6 +618,7 @@ export function setBoard(c: Content, pal: string[]): void {
     fg.push(g);
   }
   frameMesh = new Mesh(mergeGeometries(fg)!, frameMat);
+  frameMesh.movable = false; // still: rebuilt with each board
   group.add(frameMesh);
   applyGlow();
   buildProps();
@@ -845,6 +861,7 @@ function spring(cur: number, target: number, vel: number, smooth: number, dt: nu
 // ---------------------------------------------------------------- each frame
 let lastSize = "";
 export function update(dtSec: number, w: number, h: number): void {
+  burstsWaiting.clear();
   if (w > 0 && h > 0) {
     win = { w, h };
     const k = `${w}x${h}`;

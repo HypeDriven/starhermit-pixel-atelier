@@ -24,8 +24,8 @@ import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // and the countdown, the results delay, toasts, captions, the hint highlight,
 // the replay and the autosave run on the same clock, so slow frames never
 // change a round and play scripts replay exactly.
-import { clipboard, createTimers, frame, levelSettings, onFixedUpdate, onPreferencesChange, onRender, onResume, onStart, onSuspend, onUpdate, preferences, setFixedRate } from "starhermit:engine";
-import { onAction, onPointerButton, onPointerMove, onTouch, onWheel } from "starhermit:input";
+import { clipboard, createTimers, frame, levelSettings, onFixedUpdate, onPreferencesChange, onRender, onResume, onStart, onSuspend, onUpdate, preferences, setFixedRate, setTargetFps } from "starhermit:engine";
+import { onAction, onPointerButton, onPointerMove, onTouch, onWheel, primaryPointer } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { onSessionEnded, requestSignIn } from "starhermit:platform";
 import {
@@ -1067,8 +1067,20 @@ onSuspend(() => {
 onResume(() => { hidden = false; render.setHidden(false); audio.setSuspended(false); });
 
 let frameDt = 0;
+/** The game's frame cap (host API 1.49 setTargetFps, set only on a change): 30 on phone levels
+ * (levelIndex <= 3) under a finger; none otherwise, the title included (the board shows behind
+ * its veil). The rules step on the fixed update, so play is unchanged. The engine sets it aside
+ * while its menus are open, and the player's frame-rate limit still applies. */
+let frameCap = -1;
+function capFrames(): void {
+  const cap = frame().levelIndex <= 3 && primaryPointer() === "coarse" ? 30 : 0;
+  if (cap === frameCap) return;
+  frameCap = cap;
+  setTargetFps(cap || null);
+}
 onUpdate((dt) => {
   frameDt = dt;
+  capFrames();
   applyLook();
   applyTokens(ui.preferences().highContrast);
   audio.update();
