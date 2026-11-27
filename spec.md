@@ -1,7 +1,7 @@
 # Pixel Atelier — Specification (StarHermit engine build)
 
 **Status:** running specification of the shipped game.
-**Runtime:** StarHermit engine script game, `engine.version=1.50.0`, `engine.minor=50` (host API 1.50), entry
+**Runtime:** StarHermit engine script game, `engine.version=1.53.0`, `engine.minor=53` (host API 1.53), entry
 `native/main.ts`. Played natively by the StarHermit client and in browsers by the engine's web runtime (the loader
 `index.html` and `starhermit-files.json` written by `npm run package`).
 **Players:** one; local casual boards per canvas, the platform's Score Chase leaderboard when signed in.
@@ -196,9 +196,9 @@ The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-S
 
 Cosmetic particle emitters use native GPU particles with automatic CPU fallback on devices or graphics tiers without GPU particle support.
 
-## Engine 1.50.0
+## Engine 1.53.0
 
-Browser play uses the StarHermit 1.50.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+Browser play uses the StarHermit 1.53.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
 
 The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
 
@@ -206,10 +206,12 @@ Toasts use native engine stacking, styling, accessibility and lifetime managemen
 
 Browser rendering uses the engine's asynchronous pipeline creation so newly encountered materials do not stall the page. Native play retains the engine's synchronous pipeline behavior.
 
-**Frame rate (host API 1.49 `setTargetFps`).** Under a finger (`primaryPointer() === "coarse"`) the game caps itself at 30 frames a second on the phone graphics levels (`levelIndex` ≤ 3), where steady 33 ms frames replace uneven ones; elsewhere, the title included (the board shows behind its veil), there is no game cap. The rules step on the fixed update, so play is unchanged. The engine sets the cap aside while its menus are open, and the player's Frame rate limit still applies.
+**Frame rate (host API 1.53 `setTargetFps`).** Under a finger (`primaryPointer() === "coarse"`) the game caps itself at 30 frames a second on the phone graphics levels (`levelIndex` ≤ 3), where steady 33 ms frames replace uneven ones; elsewhere, the title included (the board shows behind its veil), there is no game cap. The rules step on the fixed update, so play is unchanged. The engine sets the cap aside while its menus are open, and the player's Frame rate limit still applies.
 
-**Still scenery (host API 1.49).** The table and its neon edges, the decor pylons and their tips, each board's frame and its number labels are `movable = false`: none of them moves after it is built. The cells (which rise and spring), the hover and cursor markers, the drifting dust, the holo ring, the floaters and the sparks stay movable. The game has no per-frame time uniform to move onto `frame_time()`.
+**Still scenery (host API 1.53).** The table and its neon edges, the decor pylons and their tips, each board's frame and its number labels are `movable = false`: none of them moves after it is built. The cells (which rise and spring), the hover and cursor markers, the drifting dust, the holo ring, the floaters and the sparks stay movable. The game has no per-frame time uniform to move onto `frame_time()`.
 
 Sparks queue at most as many bursts a frame as their emitter's capacity (the engine throws past it); a region fill on a large board at Particles low used to end the game, and now leaves the extra sparks out.
 
 Higher graphics tiers use native per-object motion blur for moving pieces and effects. Camera motion stays sharp, lower tiers omit the effect, and the runtime's Motion blur and Reduce motion preferences remain authoritative.
+
+On engine 1.53.0, browser play through WebGL 2 compiles a frame's shader programs together and holds that frame until they are linked, blends skinned meshes in one pass, reuses the window pass's depth, and uses a hardware WebGL 2 context when WebGPU's adapter is software.
