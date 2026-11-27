@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-08-18T13:51:04.118286+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-26T14:55:11.603926+00:00",
+    "coverArtUpdatedAt": "2026-11-27T17:07:19.909411+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-26T14:55:10.219925+00:00",
+      "deployedAt": "2026-11-27T17:07:19.897716+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.50.0",
+      "engineVersion": "1.53.0",
       "deployWarning": null
     },
     "description": "Color numbered pixel cells with painting and fill tools to reveal vibrant pixel artwork.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-26T14:55:10.888Z",
-  "sourceCommit": "09a2139ae9a8a0d86326c1e31deab874795af2d6",
-  "bytesReceived": 2267031,
-  "archiveSha256": "56b59c82921167d1af88397b1606182ab64a4046b19ec99dd8bff21641c7ed0a",
+  "publishedAt": "2026-11-27T17:07:20.137Z",
+  "sourceCommit": "0fdf7d69b3b6472f919f28f49fc983fc18323128",
+  "bytesReceived": 2267497,
+  "archiveSha256": "594edd71a5346b2aaef8e76b623c1e8e000785e9f0a1a5d450b51f4769026d93",
   "indexSha256": "6589bbf29c0861eb76e38df1d7f601f96faea12d47c926bfac0ee2bf98b1b079",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 2267031,
+    "bytesReceived": 2267497,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.50.0",
+    "engineVersion": "1.53.0",
     "deployWarning": null
   },
   "liveVerification": {
